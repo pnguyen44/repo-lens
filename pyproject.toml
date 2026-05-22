@@ -1,0 +1,15 @@
+[project]
+name = "repo-lens"
+version = "0.1.0"
+description = "AI-powered CLI for chatting about GitHub conversations"
+requires-python = ">=3.11"
+dependencies = [
+    "python-dotenv",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
