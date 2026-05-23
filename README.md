@@ -5,6 +5,8 @@ AI-powered CLI for chatting about GitHub conversations.
 ## Table of Contents
 
 - [Prerequisites](#prerequisites)
+- [Installation](#installation)
+- [Configuration](#configuration)
 - [Running the App](#running-the-app)
 - [Pre-commit Setup](#pre-commit-setup)
 
@@ -14,7 +16,17 @@ AI-powered CLI for chatting about GitHub conversations.
 - [uv](https://docs.astral.sh/uv/getting-started/installation/) (Python package manager)
 - [Docker](https://docs.docker.com/get-started/get-docker/) (for containerized usage)
 
-### Configuration
+## Installation
+
+Create a virtual environment and install all dependencies:
+
+```bash
+uv venv
+source .venv/bin/activate
+make install
+```
+
+## Configuration
 
 Copy the example environment file and fill in your values:
 
