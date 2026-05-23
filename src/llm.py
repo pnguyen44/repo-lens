@@ -26,7 +26,7 @@ class LLM(ABC):
         self,
         user_message: str,
         system: str | None = None,
-        max_token: int = 1000,
+        max_tokens: int = 1000,
         temperature: float = 1.0,
     ) -> str:
         pass

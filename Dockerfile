@@ -8,4 +8,4 @@ RUN pip install .
 
 WORKDIR /app/src
 
-CMD ["python", "main.py"]
+CMD ["python", "-u", "main.py"]

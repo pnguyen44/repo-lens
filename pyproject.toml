@@ -7,11 +7,10 @@ dependencies = [
     "anthropic>=0.104.1",
     "python-dotenv",
     "rich",
-    "mypy",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest"]
+dev = ["pytest", "mypy"]
 
 [build-system]
 requires = ["hatchling"]
