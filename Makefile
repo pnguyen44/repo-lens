@@ -5,7 +5,10 @@ run:
 	docker run -t --env-file .env -v $(PWD)/src:/app/src repo-lens
 
 install:
-	uv pip install -e .
+	uv sync --extra dev
+
+test:
+	uv run pytest -v
 
 lint:
 	pre-commit run --all-files

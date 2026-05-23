@@ -11,14 +11,14 @@ class Claude(LLM):
         self,
         user_message: str,
         system: str | None = None,
-        max_token: int = 1000,
+        max_tokens: int = 1000,
         temperature: float = 1.0,
     ) -> str:
         self.add_user_message(user_message)
 
         params: dict[str, str | int | float] = {
             "model": self.model,
-            "max_tokens": max_token,
+            "max_tokens": max_tokens,
             "temperature": temperature,
         }
 
