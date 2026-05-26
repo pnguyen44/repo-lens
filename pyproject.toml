@@ -5,6 +5,7 @@ description = "AI-powered CLI for chatting about GitHub conversations"
 requires-python = ">=3.11"
 dependencies = [
     "anthropic>=0.104.1",
+    "mcp>=1.27.1",
     "python-dotenv",
     "rich",
 ]

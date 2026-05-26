@@ -1,37 +1,39 @@
-import pytest
+from typing import Any
 from unittest.mock import MagicMock
-from llm import LLM
+
+import pytest
+
+from chat_client import ChatClient
 from claude import Claude
 
 model = "test-model"
 
 
-def test_cannot_instantiate_llm_directly() -> None:
+def test_cannot_instantiate_chat_client_directly() -> None:
     with pytest.raises(TypeError):
-        LLM(client=None, model="test")  # type: ignore[abstract]
+        ChatClient(client=None, model="test")  # type: ignore[abstract]
 
 
-def test_claude_chat_stores_messages() -> None:
+def test_claude_chat_calls_api() -> None:
     mock_client = MagicMock()
     mock_client.messages.create.return_value.content = [
         MagicMock(text="mocked response")
     ]
 
-    claude = Claude(client=mock_client, model=model)
-    result = claude.chat("hello")
+    chat_client = Claude(client=mock_client, model=model)
+    messages: list[Any] = [{"role": "user", "content": "hello"}]
+    result = chat_client.chat(messages=messages)
 
-    assert result == "mocked response"
-    assert len(claude.messages) == 2
-    assert claude.messages[0] == {"role": "user", "content": "hello"}
-    assert claude.messages[1] == {"role": "assistant", "content": "mocked response"}
+    assert result.content[0].text == "mocked response"
 
 
 def test_chat_excludes_system_when_none() -> None:
     mock_client = MagicMock()
     mock_client.messages.create.return_value.content = [MagicMock(text="response")]
 
-    claude = Claude(client=mock_client, model=model)
-    claude.chat("hello")
+    chat_client = Claude(client=mock_client, model=model)
+    messages: list[Any] = [{"role": "user", "content": "hello"}]
+    chat_client.chat(messages=messages)
 
     call_kwargs = mock_client.messages.create.call_args[1]
     assert "system" not in call_kwargs
@@ -41,8 +43,9 @@ def test_chat_includes_system_when_provided() -> None:
     mock_client = MagicMock()
     mock_client.messages.create.return_value.content = [MagicMock(text="response")]
 
-    claude = Claude(client=mock_client, model=model)
-    claude.chat("hello", system="You are helpful")
+    chat_client = Claude(client=mock_client, model=model)
+    messages: list[Any] = [{"role": "user", "content": "hello"}]
+    chat_client.chat(messages=messages, system="You are helpful")
 
     call_kwargs = mock_client.messages.create.call_args[1]
     assert "system" in call_kwargs
