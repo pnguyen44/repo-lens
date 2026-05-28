@@ -12,8 +12,8 @@ class ChatClient(ABC, Generic[T, R]):
         self.client = client
         self.model = model
 
-    def add_user_message(self, messages: list[Any], text: str) -> None:
-        messages.append({"role": "user", "content": text})
+    def add_user_message(self, messages: list[Any], content: str | list[Any]) -> None:
+        messages.append({"role": "user", "content": content})
 
     def add_assistant_message(
         self, messages: list[Any], message: str | list[Any]

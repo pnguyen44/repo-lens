@@ -47,6 +47,11 @@ class MCPClient:
         result = await self.session().list_tools()
         return list(result.tools)
 
+    async def call_tool(
+        self, name: str, arguments: dict[str, object] | None = None
+    ) -> types.CallToolResult:
+        return await self.session().call_tool(name=name, arguments=arguments)
+
     async def __aenter__(self) -> Self:
         await self.connect()
         return self

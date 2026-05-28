@@ -29,9 +29,14 @@ class Chat:
 
             if response.stop_reason == "tool_use":
                 print(self.chat_client.text_from_message(response))
-                print("Tool calls not yet implemented")
+                tool_result_parts = await ToolManager.execute_tool_requests(
+                    clients=self.mcp_clients, message=response
+                )
 
-                break
+                self.chat_client.add_user_message(
+                    messages=self.messages,
+                    content=tool_result_parts,
+                )
             else:
                 final_text_response = self.chat_client.text_from_message(response)
                 print(final_text_response)
