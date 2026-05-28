@@ -7,10 +7,14 @@ from tool_manager import ToolManager
 
 class Chat:
     def __init__(
-        self, chat_client: ChatClient[Any, Any], mcp_clients: dict[str, MCPClient]
+        self,
+        chat_client: ChatClient[Any, Any],
+        mcp_clients: dict[str, MCPClient],
+        system_prompt: str | None = None,
     ) -> None:
         self.chat_client = chat_client
         self.mcp_clients = mcp_clients
+        self.system_prompt = system_prompt
         self.tools: list[Any] = []
         self.messages: list[Any] = []
 
@@ -23,7 +27,9 @@ class Chat:
         self.chat_client.add_user_message(self.messages, query)
 
         while True:
-            response = self.chat_client.chat(messages=self.messages, tools=self.tools)
+            response = self.chat_client.chat(
+                messages=self.messages, tools=self.tools, system=self.system_prompt
+            )
 
             self.chat_client.add_assistant_message(self.messages, response)
 
