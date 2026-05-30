@@ -3,22 +3,26 @@ from config import create_config
 from claude import Claude
 from anthropic import Anthropic
 from rich import print
-from create_github_client import create_github_client
+from mcp_client import create_github_client
 import asyncio
 from chat import Chat
 
 SYSTEM_PROMPT = """You are repo-lens, a GitHub repository assistant.
 {org_context}
+When the user asks about PRs, issues, or repos across the org, use the search tool
+(e.g., "is:pr is:open org:<org>") instead of listing repos individually.
 When listing issues or PRs, include number, title, status, and assignee.
-Use tools proactively. Be concise.
+Be concise.
 """
 
 
 def build_system_prompt(default_org: str | None) -> str:
     if default_org:
         org_context = (
-            f"When a user asks about a repo without specifying the owner, "
-            f"assume it belongs to {default_org}."
+            f"The default GitHub organization is {default_org}. "
+            f"When a user mentions a repo without specifying the owner, "
+            f"assume the owner is {default_org} (e.g., {default_org}/repo-name). "
+            f"If the user does not specify a repo name, ask them to clarify."
         )
     else:
         org_context = (

@@ -1,20 +1,16 @@
-from typing import Any
+from typing import Any, Unpack
 
-from chat_client import ChatClient
+from chat_client import ChatClient, ChatParams
 
 model = "test-model"
 
 
 class FakeChatClient(ChatClient[None, str]):
-    def chat(
-        self,
-        messages: list[Any],
-        system: str | None = None,
-        max_tokens: int = 1000,
-        temperature: float = 1.0,
-        tools: list[Any] | None = None,
-    ) -> str:
+    def chat(self, messages: list[Any], **kwargs: Unpack[ChatParams]) -> str:
         return "fake response"
+
+    def chat_stream(self, messages: list[Any], **kwargs: Unpack[ChatParams]) -> str:
+        return "fake streamed response"
 
     def text_from_message(self, message: Any) -> str:
         return str(message)

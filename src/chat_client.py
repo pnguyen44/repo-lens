@@ -1,5 +1,15 @@
 from abc import ABC, abstractmethod
-from typing import Any, Generic, TypeVar
+from typing import Any, Generic, TypedDict, TypeVar, Unpack
+
+
+class ChatParams(TypedDict, total=False):
+    system: str | None
+    max_tokens: int
+    temperature: float
+    tools: list[Any] | None
+    tool_choice: dict[str, str] | str | None
+    betas: list[Any] | None
+
 
 # T = the LLM client type (Anthropic, OpenAI, etc.)
 # R = the response type (Message, ChatCompletion, etc.)
@@ -26,14 +36,11 @@ class ChatClient(ABC, Generic[T, R]):
         )
 
     @abstractmethod
-    def chat(
-        self,
-        messages: list[Any],
-        system: str | None = None,
-        max_tokens: int = 1000,
-        temperature: float = 1.0,
-        tools: list[Any] | None = None,
-    ) -> R:
+    def chat(self, messages: list[Any], **kwargs: Unpack[ChatParams]) -> R:
+        pass
+
+    @abstractmethod
+    def chat_stream(self, messages: list[Any], **kwargs: Unpack[ChatParams]) -> R:
         pass
 
     @abstractmethod

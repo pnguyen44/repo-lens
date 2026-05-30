@@ -1,9 +1,9 @@
-from typing import Any
+from typing import Any, Unpack
 
 from anthropic import Anthropic
 from anthropic.types import Message
 
-from chat_client import ChatClient
+from chat_client import ChatClient, ChatParams
 
 
 class Claude(ChatClient[Anthropic, Message]):
@@ -15,29 +15,43 @@ class Claude(ChatClient[Anthropic, Message]):
             [block.text for block in message.content if block.type == "text"]
         )
 
-    def chat(
-        self,
-        messages: list[Any],
-        system: str | None = None,
-        max_tokens: int = 1000,
-        temperature: float = 1.0,
-        tools: list[Any] | None = None,
-    ) -> Message:
+    def _build_params(
+        self, messages: list[Any], **kwargs: Unpack[ChatParams]
+    ) -> dict[str, Any]:
         params: dict[str, Any] = {
             "model": self.model,
-            "max_tokens": max_tokens,
-            "temperature": temperature,
+            "messages": messages,
+            "max_tokens": kwargs.get("max_tokens", 1000),
+            "temperature": kwargs.get("temperature", 1.0),
         }
 
-        if system:
-            params["system"] = system
+        if kwargs.get("system"):
+            params["system"] = kwargs["system"]
 
-        if tools:
-            params["tools"] = tools
+        if kwargs.get("tools"):
+            params["tools"] = kwargs["tools"]
 
-        response = self.client.messages.create(
-            **params,
-            messages=messages,
-        )
+        if kwargs.get("tool_choice"):
+            params["tool_choice"] = kwargs["tool_choice"]
+
+        if kwargs.get("betas"):
+            params["betas"] = kwargs["betas"]
+
+        return params
+
+    def chat(self, messages: list[Any], **kwargs: Unpack[ChatParams]) -> Message:
+        params = self._build_params(messages=messages, **kwargs)
+
+        response = self.client.messages.create(**params)
 
         return response
+
+    def chat_stream(self, messages: list[Any], **kwargs: Unpack[ChatParams]) -> Message:
+        params = self._build_params(messages=messages, **kwargs)
+
+        with self.client.messages.stream(**params) as stream:
+            for text in stream.text_stream:
+                print(text, end="", flush=True)
+            print()
+
+        return stream.get_final_message()
