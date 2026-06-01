@@ -37,6 +37,9 @@ class Claude(ChatClient[Anthropic, Message]):
         if kwargs.get("betas"):
             params["betas"] = kwargs["betas"]
 
+        if kwargs.get("stop_sequences"):
+            params["stop_sequences"] = kwargs["stop_sequences"]
+
         return params
 
     def chat(self, messages: list[Any], **kwargs: Unpack[ChatParams]) -> Message:

@@ -9,6 +9,7 @@ class ChatParams(TypedDict, total=False):
     tools: list[Any] | None
     tool_choice: dict[str, str] | str | None
     betas: list[Any] | None
+    stop_sequences: list[str] | None
 
 
 # T = the LLM client type (Anthropic, OpenAI, etc.)

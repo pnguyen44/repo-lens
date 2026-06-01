@@ -8,6 +8,7 @@ AI-powered CLI for chatting about GitHub conversations.
 - [Installation](#installation)
 - [Configuration](#configuration)
 - [Running the App](#running-the-app)
+- [Prompt Eval Tool](#prompt-eval-tool)
 - [Pre-commit Setup](#pre-commit-setup)
 
 ## Prerequisites
@@ -41,6 +42,14 @@ Then edit `.env` with your values. See `.env.example` for all available variable
 ```bash
 make build
 make run
+```
+
+## Prompt Eval Tool
+
+Evaluate how well a prompt performs by auto-generating test cases and scoring responses with LLM-as-judge.
+
+```bash
+make eval PROMPT="Review the following code. Identify bugs and suggest improvements."
 ```
 
 ## Pre-commit Setup

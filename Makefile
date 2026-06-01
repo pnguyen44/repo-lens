@@ -12,3 +12,6 @@ test:
 
 lint:
 	pre-commit run --all-files
+
+eval:
+	uv run src/prompt_eval.py "$(PROMPT)"
