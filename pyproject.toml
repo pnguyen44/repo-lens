@@ -6,8 +6,10 @@ requires-python = ">=3.11"
 dependencies = [
     "anthropic>=0.104.1",
     "mcp>=1.27.1",
+    "numpy>=2.4.6",
     "python-dotenv",
     "rich",
+    "voyageai>=0.3.7",
 ]
 
 [project.optional-dependencies]
