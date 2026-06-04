@@ -1,18 +1,27 @@
 from typing import Protocol
+import time
 
 from voyageai.client import Client as VoyageClient
+from voyageai.error import RateLimitError
 
 
 class Embedder(Protocol):
-    def generate_embedding(self, text: str) -> list[float]: ...
+    def generate_embeddings(self, texts: list[str]) -> list[list[float]]: ...
 
 
 class VoyageEmbedder:
     def __init__(self, client: VoyageClient) -> None:
         self.client = client
 
-    def generate_embedding(
-        self, text: str, model: str = "voyage-3-large", input_type: str = "query"
-    ) -> list[float]:
-        result = self.client.embed([text], model=model, input_type=input_type)
-        return [float(x) for x in result.embeddings[0]]
+    def generate_embeddings(
+        self, texts: list[str], model: str = "voyage-3-large", input_type: str = "query"
+    ) -> list[list[float]]:
+        for attempt in range(2):
+            try:
+                result = self.client.embed(texts, model=model, input_type=input_type)
+                return [list(float(x) for x in vec) for vec in result.embeddings]
+            except RateLimitError:
+                if attempt == 0:
+                    print("Rate limited, waiting 60s...")
+                    time.sleep(60)
+        raise RateLimitError("Still rate limited after retry")
