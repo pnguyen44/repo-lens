@@ -77,15 +77,30 @@ class PromptEvaluator:
         self.client.add_assistant_message(messages, "```json")
         response = self.client.chat(messages=messages, stop_sequences=["```"])
         text = self.client.text_from_message(response)
+
+        fallback = {
+            "strengths": [],
+            "weaknesses": [],
+            "reasoning": "Failed to parse grade",
+            "score": 0,
+        }
         try:
             result: dict[str, Any] = json.loads(text)
         except json.JSONDecodeError:
-            return {
-                "strengths": [],
-                "weaknesses": [],
-                "reasoning": "Failed to parse grade",
-                "score": 0,
-            }
+            return fallback
+
+        if not isinstance(result, dict):
+            return fallback
+
+        required_keys = {"score", "strengths", "weaknesses", "reasoning"}
+
+        if not required_keys.issubset(result.keys()):
+            return fallback
+
+        try:
+            result["score"] = int(result["score"])
+        except (TypeError, ValueError):
+            return fallback
 
         return result
 

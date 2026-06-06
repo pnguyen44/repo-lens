@@ -33,6 +33,8 @@ class VectorIndex:
         self._distance_metric = distance_metric
 
     def add_vector(self, vector: list[float], document: dict[str, Any]) -> None:
+        if not vector:
+            raise ValueError("Vector must not be empty")
         if not self.vectors:
             self._vector_dim = len(vector)
         elif len(vector) != self._vector_dim:
@@ -139,4 +141,4 @@ class VectorIndex:
         return len(self.vectors)
 
     def __repr__(self) -> str:
-        return f"VectorIndex(count={len(self)}, dim={self._vector_dim}, metric='{self._distance_metric}', has_embedding_fn={self._embedding_fn is not None})"
+        return f"VectorIndex(count={len(self)}, dim={self._vector_dim}, metric='{self._distance_metric.value}', has_embedding_fn={self._embedding_fn is not None})"

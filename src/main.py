@@ -3,9 +3,13 @@ from config import create_config
 from claude import Claude
 from anthropic import Anthropic
 from rich import print
-from mcp_client import create_github_client
+from indexer import index_repo
+from mcp_client import MCPClient, create_github_client
 import asyncio
 from chat import Chat
+from voyageai.client import Client as VoyageClient
+from embeddings import Embedder, VoyageEmbedder
+from vector_index import VectorIndex
 
 SYSTEM_PROMPT = """You are repo-lens, a GitHub repository assistant.
 {org_context}
@@ -32,20 +36,70 @@ def build_system_prompt(default_org: str | None) -> str:
     return SYSTEM_PROMPT.format(org_context=org_context)
 
 
+async def validate_repo(github_mcp: MCPClient, owner: str, repo: str) -> bool:
+    try:
+        result = await github_mcp.call_tool(
+            "get_file_contents", {"owner": owner, "repo": repo, "path": "."}
+        )
+        if result.isError:
+            print(f"Repo {owner}/{repo} not found or not accessible.")
+            return False
+        return True
+    except Exception as e:
+        print(f"Error checking repo: {e}")
+        return False
+
+
+async def prompt_and_index(
+    github_mcp: MCPClient, embedder: Embedder, index: VectorIndex, owner: str
+) -> str:
+    while True:
+        repo = input("> Repo name: ")
+        if not await validate_repo(github_mcp=github_mcp, owner=owner, repo=repo):
+            continue
+        try:
+            await index_repo(
+                mcp_client=github_mcp,
+                embedder=embedder,
+                index=index,
+                owner=owner,
+                repo=repo,
+            )
+        except Exception as e:
+            print(f"Could not index README: {owner}/{repo}: {e}")
+            print("Chat will work without RAG context.\n")
+
+        return repo
+
+
 async def main() -> None:
     config = create_config()
     client = Anthropic()
 
     async with AsyncExitStack() as stack:
-        github_client = await stack.enter_async_context(
+        github_mcp = await stack.enter_async_context(
             create_github_client(config.github_token)
         )
 
+        owner = config.default_org or input("> GITHUB org: ")
+
         claude = Claude(client=client, model=config.claude_model)
+
+        embedder = VoyageEmbedder(VoyageClient())
+        index = VectorIndex()
+
+        repo = await prompt_and_index(
+            github_mcp=github_mcp, embedder=embedder, index=index, owner=owner
+        )
+
+        print(f"Chatting about {owner}/{repo}")
+
         chat = Chat(
             chat_client=claude,
-            mcp_clients={"github": github_client},
+            mcp_clients={"github": github_mcp},
             system_prompt=build_system_prompt(config.default_org),
+            embedder=embedder,
+            index=index,
         )
 
         while True:

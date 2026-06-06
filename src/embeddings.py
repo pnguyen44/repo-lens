@@ -16,6 +16,12 @@ class VoyageEmbedder:
     def generate_embeddings(
         self, texts: list[str], model: str = "voyage-3-large", input_type: str = "query"
     ) -> list[list[float]]:
+        if not texts:
+            raise ValueError("texts must not be empty")
+
+        if any(t == "" for t in texts):
+            raise ValueError("texts must not contain empty strings")
+
         for attempt in range(2):
             try:
                 result = self.client.embed(texts, model=model, input_type=input_type)

@@ -1,9 +1,12 @@
 from typing import Any
 
 from chat_client import ChatClient
+from embeddings import Embedder
 from mcp_client import MCPClient
 from tool_manager import ToolManager
 from anthropic import BadRequestError
+from typing import Optional
+from vector_index import VectorIndex
 
 
 class Chat:
@@ -12,12 +15,34 @@ class Chat:
         chat_client: ChatClient[Any, Any],
         mcp_clients: dict[str, MCPClient],
         system_prompt: str | None = None,
+        embedder: Optional[Embedder] = None,
+        index: Optional[VectorIndex] = None,
     ) -> None:
         self.chat_client = chat_client
         self.mcp_clients = mcp_clients
         self.system_prompt = system_prompt
         self.tools: list[Any] = []
         self.messages: list[Any] = []
+        self.embedder = embedder
+        self.index = index
+
+    def _build_context(self, query: str) -> str:
+        if not self.embedder or not self.index:
+            return ""
+        query_vector = self.embedder.generate_embeddings([query])[0]
+        results = self.index.search(query_vector, k=3)
+
+        context = "\n".join(chunk["content"] for chunk, _ in results)
+
+        augmented_query = f"""
+        <context>
+        {context}
+        </context>
+
+        {query}
+        """
+
+        return augmented_query
 
     async def run(self, query: str) -> str:
         final_text_response = ""
@@ -25,7 +50,8 @@ class Chat:
         if not self.tools:
             self.tools = await ToolManager.get_all_tools(self.mcp_clients)
 
-        self.chat_client.add_user_message(self.messages, query)
+        augmented_query = self._build_context(query) or query
+        self.chat_client.add_user_message(self.messages, augmented_query)
 
         while True:
             try:

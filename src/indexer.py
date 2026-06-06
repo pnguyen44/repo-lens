@@ -23,6 +23,8 @@ async def fetch_readme(mcp_client: MCPClient, owner: str, repo: str) -> str:
         ):
             readme_text = item.resource.text
 
+    if not readme_text:
+        raise ValueError(f"No README context found for {owner}/{repo}")
     return readme_text
 
 
@@ -31,10 +33,17 @@ async def index_repo(
 ) -> int:
     """Fetch repo README, chunk it, embed each chunk, and store in the index."""
     readme = await fetch_readme(mcp_client=mcp_client, owner=owner, repo=repo)
-    chunks = chunk_by_section(readme)
+    chunks = [c for c in chunk_by_section(readme) if c.strip()]
+
+    if not chunks:
+        return 0
+
+    repo_name = f"{owner}/{repo}"
+    print(f"Indexing {repo_name}")
+
     vectors = embedder.generate_embeddings(chunks)
     for vector, chunk in zip(vectors, chunks):
-        index.add_vector(vector, {"content": chunk, "repo": f"{owner}/{repo}"})
+        index.add_vector(vector, {"content": chunk, "repo": repo_name})
     return len(chunks)
 
 
