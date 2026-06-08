@@ -50,6 +50,7 @@ async def test_rag_end_to_end(mock_mcp_client, fake_embedder):
     assert len(results) > 0
     assert results[0][0]["repo"] == f"{owner}/{repo}"
     assert len(index) == 3
+    assert "section" in results[0][0]
 
 
 @pytest.mark.asyncio

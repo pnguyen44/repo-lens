@@ -43,7 +43,10 @@ async def index_repo(
 
     vectors = embedder.generate_embeddings(chunks)
     for vector, chunk in zip(vectors, chunks):
-        index.add_vector(vector, {"content": chunk, "repo": repo_name})
+        section = chunk.split("\n", 1)[0].lstrip("# ").strip()
+        index.add_vector(
+            vector, {"content": chunk, "repo": repo_name, "section": section}
+        )
     return len(chunks)
 
 

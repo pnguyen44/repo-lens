@@ -32,7 +32,16 @@ class Chat:
         query_vector = self.embedder.generate_embeddings([query])[0]
         results = self.index.search(query_vector, k=3)
 
-        context = "\n".join(chunk["content"] for chunk, _ in results)
+        sources = []
+
+        for chunk, _ in results:
+            sources.append(
+                f'<source repo="{chunk["repo"]}" section="{chunk["section"]}">\n'
+                f"{chunk['content']}\n"
+                f"</source>"
+            )
+
+        context = "\n".join(sources)
 
         augmented_query = f"""
         <context>
