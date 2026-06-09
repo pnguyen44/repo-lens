@@ -1,4 +1,5 @@
 from contextlib import AsyncExitStack
+from math import e
 from config import create_config
 from claude import Claude
 from anthropic import Anthropic
@@ -28,9 +29,9 @@ When listing issues or PRs, include number, title, status, and assignee.
 When answering using context from <source> tags, cite the repo and section in your response.
 Be concise.
 
-If the context says no relevant information was found, use the available tools to search
-the repo for an answer. Only say you don't have enough information if the tools also don't return
-anything useful.
+If the context says no relevant information was found, you MUST immediately search the repository
+using available tools before responding. Never ask the user whether to search. Only say you don't
+have enough information after tools also return nothing useful.
 
 """
 
@@ -129,3 +130,5 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         print("\n exiting")
+    except Exception as e:
+        logger.error("Unexpected error: %s", e)

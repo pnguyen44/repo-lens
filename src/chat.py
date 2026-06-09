@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from typing import Any, Optional
 
@@ -5,7 +6,7 @@ from chat_client import ChatClient
 from embeddings import Embedder
 from mcp_client import MCPClient
 from tool_manager import ToolManager
-from anthropic import BadRequestError
+from anthropic import BadRequestError, RateLimitError
 from vector_index import VectorIndex
 
 logger = logging.getLogger(__name__)
@@ -13,6 +14,7 @@ logger = logging.getLogger(__name__)
 # Cosine distance (1 − similarity): 0.0 = identical, 2.0 = opposite.
 # Chunks with distance <= this value are included as context in _build_context.
 DISTANCE_THRESHOLD = 0.6
+MAX_RETRIES = 3
 
 
 class Chat:
@@ -73,6 +75,7 @@ class Chat:
         augmented_query = self._build_context(query) or query
         self.chat_client.add_user_message(self.messages, augmented_query)
 
+        retries = 0
         while True:
             try:
                 response = self.chat_client.chat_stream(
@@ -82,6 +85,10 @@ class Chat:
                 self.chat_client.add_assistant_message(self.messages, response)
 
                 if response.stop_reason == "tool_use":
+                    tool_names = [
+                        b.name for b in response.content if b.type == "tool_use"
+                    ]
+                    logger.info("Tool call: %s", tool_names)
                     tool_result_parts = await ToolManager.execute_tool_requests(
                         clients=self.mcp_clients, message=response
                     )
@@ -99,4 +106,13 @@ class Chat:
                     self.messages.clear()
                     break
                 raise
+            except RateLimitError:
+                if retries >= MAX_RETRIES:
+                    logger.error("Rate limited after %d retries. Skipping.", retries)
+                    break
+                wait = 2**retries
+                logger.warning("Rate limited. Retrying in %ds...", wait)
+                await asyncio.sleep(wait)
+                retries += 1
+                continue
         return final_text_response
