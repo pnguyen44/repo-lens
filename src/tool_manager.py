@@ -1,8 +1,11 @@
 import json
+import logging
 from mcp_client import MCPClient
 from mcp.types import CallToolResult, TextContent
 from anthropic.types import Message, ToolResultBlockParam
 from typing import Any, Optional, Literal
+
+logger = logging.getLogger(__name__)
 
 
 class ToolManager:
@@ -91,7 +94,7 @@ class ToolManager:
                 )
             except Exception as e:
                 error_message = f"Error executing tool '{tool_name}': {e}"
-                print(error_message)
+                logger.error(error_message)
                 tool_result_part = cls._build_tool_result_part(
                     tool_use_id=tool_use_id,
                     text=json.dumps({"error": error_message}),

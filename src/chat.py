@@ -1,12 +1,14 @@
-from typing import Any
+import logging
+from typing import Any, Optional
 
 from chat_client import ChatClient
 from embeddings import Embedder
 from mcp_client import MCPClient
 from tool_manager import ToolManager
 from anthropic import BadRequestError
-from typing import Optional
 from vector_index import VectorIndex
+
+logger = logging.getLogger(__name__)
 
 # Cosine distance (1 − similarity): 0.0 = identical, 2.0 = opposite.
 # Chunks with distance <= this value are included as context in _build_context.
@@ -39,7 +41,7 @@ class Chat:
         sources = []
 
         for chunk, dist in results:
-            print("dist", dist)
+            logger.debug("Vector search distance: %s", dist)
             if dist <= DISTANCE_THRESHOLD:
                 sources.append(
                     f'<source repo="{chunk["repo"]}" section="{chunk["section"]}">\n'
@@ -93,7 +95,7 @@ class Chat:
                     break
             except BadRequestError as e:
                 if "prompt is too long" in str(e):
-                    print("\n Conversation is too long. Starting fresh.\n")
+                    logger.warning("Conversation is too long. Starting fresh.")
                     self.messages.clear()
                     break
                 raise

@@ -10,6 +10,15 @@ from chat import Chat
 from voyageai.client import Client as VoyageClient
 from embeddings import Embedder, VoyageEmbedder
 from vector_index import VectorIndex
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(name)s %(levelname)s %(message)s",
+)
+
+logger = logging.getLogger(__name__)
+
 
 SYSTEM_PROMPT = """You are repo-lens, a GitHub repository assistant.
 {org_context}
@@ -48,11 +57,11 @@ async def validate_repo(github_mcp: MCPClient, owner: str, repo: str) -> bool:
             "get_file_contents", {"owner": owner, "repo": repo, "path": "."}
         )
         if result.isError:
-            print(f"Repo {owner}/{repo} not found or not accessible.")
+            logger.warning("Repo %s/%s not found or not accessible.", owner, repo)
             return False
         return True
     except Exception as e:
-        print(f"Error checking repo: {e}")
+        logger.error("Error checking repo: %s", e)
         return False
 
 
@@ -72,8 +81,8 @@ async def prompt_and_index(
                 repo=repo,
             )
         except Exception as e:
-            print(f"Could not index README: {owner}/{repo}: {e}")
-            print("Chat will work without RAG context.\n")
+            logger.error("Could not index README: %s/%s: %s", owner, repo, e)
+            logger.warning("Chat will work without RAG context.")
 
         return repo
 

@@ -1,3 +1,4 @@
+import logging
 from embeddings import Embedder, VoyageEmbedder
 from mcp_client import MCPClient, create_github_client
 import asyncio
@@ -6,6 +7,8 @@ from mcp.types import EmbeddedResource, TextResourceContents
 from vector_index import VectorIndex
 from voyageai.client import Client as VoyageClient
 from chunker import chunk_by_section
+
+logger = logging.getLogger(__name__)
 
 NUM_RESULTS = 2
 PREVIEW_LENGTH = 200
@@ -39,7 +42,7 @@ async def index_repo(
         return 0
 
     repo_name = f"{owner}/{repo}"
-    print(f"Indexing {repo_name}")
+    logger.info("Indexing %s", repo_name)
 
     vectors = embedder.generate_embeddings(chunks)
     for vector, chunk in zip(vectors, chunks):

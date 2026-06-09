@@ -1,8 +1,11 @@
+import logging
 from typing import Protocol
 import time
 
 from voyageai.client import Client as VoyageClient
 from voyageai.error import RateLimitError
+
+logger = logging.getLogger(__name__)
 
 
 class Embedder(Protocol):
@@ -28,6 +31,6 @@ class VoyageEmbedder:
                 return [list(float(x) for x in vec) for vec in result.embeddings]
             except RateLimitError:
                 if attempt == 0:
-                    print("Rate limited, waiting 60s...")
+                    logger.warning("Rate limited, waiting 60s...")
                     time.sleep(60)
         raise RateLimitError("Still rate limited after retry")

@@ -1,11 +1,13 @@
 import json
+import logging
 import sys
 from typing import Any
-
 from anthropic import Anthropic
 from chat_client import ChatClient
 from claude import Claude
 from config import create_config
+
+logger = logging.getLogger(__name__)
 
 
 class PromptEvaluator:
@@ -41,9 +43,9 @@ class PromptEvaluator:
             result: list[dict[str, Any]] = json.loads(text)
         except json.JSONDecodeError:
             if max_tries > 0:
-                print("Failed to parse generated dataset. Retrying")
+                logger.warning("Failed to parse generated dataset. Retrying")
                 return self.generate_dataset(prompt, total_tests, max_tries - 1)
-            print("Failed to generate valid dataset after retries.")
+            logger.error("Failed to generate valid dataset after retries.")
             return []
 
         return result
