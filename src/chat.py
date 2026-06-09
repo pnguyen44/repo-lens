@@ -8,6 +8,10 @@ from anthropic import BadRequestError
 from typing import Optional
 from vector_index import VectorIndex
 
+# Cosine distance (1 − similarity): 0.0 = identical, 2.0 = opposite.
+# Chunks with distance <= this value are included as context in _build_context.
+DISTANCE_THRESHOLD = 0.6
+
 
 class Chat:
     def __init__(
@@ -34,14 +38,19 @@ class Chat:
 
         sources = []
 
-        for chunk, _ in results:
-            sources.append(
-                f'<source repo="{chunk["repo"]}" section="{chunk["section"]}">\n'
-                f"{chunk['content']}\n"
-                f"</source>"
-            )
+        for chunk, dist in results:
+            print("dist", dist)
+            if dist <= DISTANCE_THRESHOLD:
+                sources.append(
+                    f'<source repo="{chunk["repo"]}" section="{chunk["section"]}">\n'
+                    f"{chunk['content']}\n"
+                    f"</source>"
+                )
 
-        context = "\n".join(sources)
+        if not sources:
+            context = "No relevant source found"
+        else:
+            context = "\n".join(sources)
 
         augmented_query = f"""
         <context>

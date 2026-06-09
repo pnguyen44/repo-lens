@@ -18,6 +18,11 @@ When the user asks about PRs, issues, or repos across the org, use the search to
 When listing issues or PRs, include number, title, status, and assignee.
 When answering using context from <source> tags, cite the repo and section in your response.
 Be concise.
+
+If the context says no relevant information was found, use the available tools to search
+the repo for an answer. Only say you don't have enough information if the tools also don't return
+anything useful.
+
 """
 
 
