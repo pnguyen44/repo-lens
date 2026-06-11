@@ -15,3 +15,6 @@ lint:
 
 eval:
 	uv run src/prompt_eval.py "$(PROMPT)"
+
+rag-eval:
+	uv run src/rag_eval.py

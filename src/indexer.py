@@ -50,7 +50,7 @@ async def index_repo(
         index.add_vector(
             vector, {"content": chunk, "repo": repo_name, "section": section}
         )
-    return len(chunks)
+    return len(index.vectors)
 
 
 async def main() -> None:

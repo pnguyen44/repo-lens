@@ -1,0 +1,245 @@
+import json
+import logging
+import textwrap
+from pathlib import Path
+from typing import Any
+from anthropic import Anthropic
+from dotenv import load_dotenv
+from chat_client import ChatClient
+from claude import Claude
+from config import create_config
+from embeddings import Embedder, VoyageEmbedder
+from vector_index import VectorIndex
+from chunker import chunk_by_section
+from rag_eval_dataset import EVAL_CASES
+from voyageai.client import Client as VoyageClient
+
+logger = logging.getLogger(__name__)
+
+FIXTURE_PATH = Path(__file__).parent / "../tests/fixtures/hyperfleet_api_readme.md"
+
+
+class RAGEvaluator:
+    def __init__(
+        self,
+        embedder: Embedder,
+        index: VectorIndex,
+        eval_cases: list[dict[str, Any]],
+        fixture_path: Path,
+        chat_client: ChatClient[Any, Any] | None = None,
+    ) -> None:
+        self.embedder = embedder
+        self.index = index
+        self.eval_cases = eval_cases
+        self.fixture_path = fixture_path
+        self.chat_client = chat_client
+
+    def load_and_index(self) -> int:
+        """Read the fixture README, chunk it, embed, and load into the index."""
+        readme_text = self.fixture_path.read_text()
+        chunks = [c for c in chunk_by_section(readme_text) if c.strip()]
+
+        if not chunks:
+            return 0
+
+        vectors = self.embedder.generate_embeddings(chunks)
+
+        for vector, chunk in zip(vectors, chunks):
+            section = self.identify_section(chunk)
+            self.index.add_vector(
+                vector=vector, document={"content": chunk, "section": section}
+            )
+        return len(self.index.vectors)
+
+    def identify_section(self, chunk_text: str) -> str:
+        """Extract the ## section name from a chunk's text."""
+        return chunk_text.split("\n", 1)[0].lstrip("# ").strip()
+
+    def generate_answer(self, question: str, context: str) -> str:
+        if self.chat_client is None:
+            raise ValueError("chat_client required for answer generation")
+
+        message = textwrap.dedent(f"""\
+        {question}
+        <context>
+        {context}
+        </context>
+        """)
+
+        messages: list[Any] = []
+        self.chat_client.add_user_message(messages=messages, content=message)
+        response = self.chat_client.chat(messages=messages)
+        return self.chat_client.text_from_message(response)
+
+    def judge_faithfulness(
+        self, context: str, question: str, answer: str
+    ) -> dict[str, Any]:
+        if self.chat_client is None:
+            raise ValueError("chat_client required for judge faithfulness")
+        eval_prompt = textwrap.dedent(f"""\
+        Context: {context}
+        Question: {question}
+        Answer: {answer}
+        Is the answer fully supported by the context?
+        Return JSON only: {{"verdict": "grounded | partial | hallucinated", "reasoning": ""}}
+        """)
+
+        messages: list[Any] = []
+        self.chat_client.add_user_message(messages=messages, content=eval_prompt)
+        self.chat_client.add_assistant_message(messages=messages, message="```json")
+        response = self.chat_client.chat(messages=messages, stop_sequences=["```"])
+        text = self.chat_client.text_from_message(response)
+
+        fallback = {
+            "verdict": "unknown",
+            "reasoning": "Failed to parse grade",
+        }
+
+        try:
+            result: dict[str, Any] = json.loads(text)
+        except json.JSONDecodeError:
+            return fallback
+
+        if not isinstance(result, dict):
+            return fallback
+
+        required_keys = {"verdict", "reasoning"}
+
+        if not required_keys.issubset(result.keys()):
+            return fallback
+
+        return result
+
+    def evaluate_faithfulness(self, k: int = 3) -> list[dict[str, Any]]:
+        if not self.chat_client:
+            return []
+        results: list[dict[str, Any]] = []
+        for case in self.eval_cases:
+            question = str(case["question"])
+            try:
+                query_vector = self.embedder.generate_embeddings([question])[0]
+                hits = self.index.search(query_vector, k)
+                context = "\n".join([doc["content"] for doc, _dist in hits])
+                answer = self.generate_answer(context=context, question=question)
+                judgement = self.judge_faithfulness(
+                    context=context, question=question, answer=answer
+                )
+                results.append({"question": question, "judgement": judgement})
+            except Exception as exc:
+                logger.warning("Faithfulness eval failed for '%s': %s", question, exc)
+                results.append(
+                    {"question": question, "judgement": None, "error": str(exc)}
+                )
+        return results
+
+    def _precision_recall(
+        self, retrieved: set[str], expected: set[str]
+    ) -> tuple[float, float]:
+        true_positions = retrieved & expected
+        precision = len(true_positions) / len(retrieved) if retrieved else 0.0
+        recall = len(true_positions) / len(expected) if expected else 0.0
+        return precision, recall
+
+    def evaluate_retrieval(self, k: int = 3) -> list[dict[str, Any]]:
+        """Run each eval case: embed the question, search, compute precision and recall."""
+        questions: list[str] = [str(case["question"]) for case in self.eval_cases]
+        query_vectors = self.embedder.generate_embeddings(questions)
+
+        results = []
+
+        for case, query_vector in zip(self.eval_cases, query_vectors):
+            hits = self.index.search(query_vector, k)
+            result: dict[str, Any] = {"question": case["question"]}
+
+            if "expected_sections" in case:
+                retrieved_sections = {
+                    self.identify_section(doc["content"]) for doc, _dist in hits
+                }
+                expected_sections = set(case["expected_sections"])
+                result["section_precision"], result["section_recall"] = (
+                    self._precision_recall(
+                        retrieved=retrieved_sections, expected=expected_sections
+                    )
+                )
+
+            if "expected_keywords" in case:
+                content = " ".join([doc["content"] for doc, _dist in hits]).lower()
+                expected_kw = {str(kw).lower() for kw in case["expected_keywords"]}
+                found = {kw for kw in expected_kw if kw in content}
+                _, result["keyword_recall"] = self._precision_recall(
+                    retrieved=found, expected=expected_kw
+                )
+
+            results.append(result)
+        return results
+
+    def print_results(self, results: list[dict[str, Any]]) -> None:
+        """Print per-question scores and aggregate precision/recall."""
+        for r in results:
+            print(f"\nQ: {r['question']}")
+            if "section_precision" in r:
+                print(
+                    f"  Section Precision: {r['section_precision']:.2f} | Recall: {r['section_recall']:.2f}"
+                )
+            if "keyword_recall" in r:
+                print(f"  Keyword Recall: {r['keyword_recall']:.2f}")
+
+            if "judgement" in r:
+                print(f"  Faithfulness: {r['judgement']['verdict']}")
+
+        print("\n---")
+        verdicts = [r["judgement"]["verdict"] for r in results if "judgement" in r]
+        if verdicts:
+            grounded = verdicts.count("grounded")
+            print(f"Faithfulness: {grounded}/{len(verdicts)} grounded")
+
+        section_precisions = [
+            r["section_precision"] for r in results if "section_precision" in r
+        ]
+        section_recalls = [
+            r["section_recall"] for r in results if "section_recall" in r
+        ]
+        keyword_recalls = [
+            r["keyword_recall"] for r in results if "keyword_recall" in r
+        ]
+
+        if section_precisions:
+            print(
+                f"Avg Section Precision: {sum(section_precisions) / len(section_precisions):.2f}"
+            )
+            print(
+                f"Avg Section Recall:    {sum(section_recalls) / len(section_recalls):.2f}"
+            )
+        if keyword_recalls:
+            print(
+                f"Avg Keyword Recall:    {sum(keyword_recalls) / len(keyword_recalls):.2f}"
+            )
+
+
+def main() -> None:
+    load_dotenv()
+    config = create_config()
+    try:
+        index = VectorIndex()
+        embedder = VoyageEmbedder(VoyageClient())
+        chat_client = Claude(client=Anthropic(), model=config.claude_model)
+
+        rag_evaluator = RAGEvaluator(
+            index=index,
+            embedder=embedder,
+            fixture_path=FIXTURE_PATH,
+            eval_cases=EVAL_CASES[:3],
+            chat_client=chat_client,
+        )
+        rag_evaluator.load_and_index()
+        results = rag_evaluator.evaluate_retrieval()
+        faithfulness_results = rag_evaluator.evaluate_faithfulness()
+        for r, f in zip(results, faithfulness_results):
+            r["judgement"] = f["judgement"]
+        rag_evaluator.print_results(results)
+    except Exception as e:
+        print(f"Error: {e}")
+
+
+if __name__ == "__main__":
+    main()
