@@ -1,5 +1,5 @@
 import logging
-from embeddings import Embedder, VoyageEmbedder
+from embeddings import Embedder, VoyageEmbedder, InputType
 from mcp_client import MCPClient, create_github_client
 import asyncio
 from config import create_config
@@ -12,6 +12,10 @@ logger = logging.getLogger(__name__)
 
 NUM_RESULTS = 2
 PREVIEW_LENGTH = 200
+
+
+def to_github_anchor(section: str) -> str:
+    return section.lower().replace(" ", "-").replace(".", "").replace("/", "")
 
 
 async def fetch_readme(mcp_client: MCPClient, owner: str, repo: str) -> str:
@@ -44,11 +48,14 @@ async def index_repo(
     repo_name = f"{owner}/{repo}"
     logger.info("Indexing %s", repo_name)
 
-    vectors = embedder.generate_embeddings(chunks)
+    vectors = embedder.generate_embeddings(texts=chunks, input_type=InputType.DOCUMENT)
     for vector, chunk in zip(vectors, chunks):
         section = chunk.split("\n", 1)[0].lstrip("# ").strip()
+        anchor = to_github_anchor(section)
+        url = f"https://github.com/{owner}/{repo}/blob/main/README.md#{anchor}"
         index.add_vector(
-            vector, {"content": chunk, "repo": repo_name, "section": section}
+            vector,
+            {"content": chunk, "repo": repo_name, "section": section, "url": url},
         )
     return len(index.vectors)
 
@@ -73,7 +80,9 @@ async def main() -> None:
 
         query = "How does the API work?"
         print(f'Query: "{query}"\n')
-        query_vector = embedder.generate_embeddings([query])[0]
+        query_vector = embedder.generate_embeddings(
+            texts=[query], input_type=InputType.QUERY
+        )[0]
         results = index.search(query_vector, k=NUM_RESULTS)
 
         for i, (doc, distance) in enumerate(results, 1):

@@ -26,15 +26,19 @@ class ChatClient(ABC, Generic[T, R]):
     def add_user_message(self, messages: list[Any], content: str | list[Any]) -> None:
         messages.append({"role": "user", "content": content})
 
-    def add_assistant_message(
-        self, messages: list[Any], message: str | list[Any]
-    ) -> None:
-        messages.append(
-            {
-                "role": "assistant",
-                "content": message.content if hasattr(message, "content") else message,
-            }
-        )
+    def add_assistant_message(self, messages: list[Any], message: R | str) -> None:
+        if isinstance(message, str):
+            content: Any = message
+        else:
+            content = message.content  # type: ignore[attr-defined]
+        messages.append({"role": "assistant", "content": content})
+
+    def build_document_block(self, content: str, title: str) -> dict[str, Any]:
+        """Build a context document block. Override for provider-specific formats."""
+        return {
+            "type": "text",
+            "text": f'<source title="{title}">\n{content}\n</source>',
+        }
 
     @abstractmethod
     def chat(self, messages: list[Any], **kwargs: Unpack[ChatParams]) -> R:

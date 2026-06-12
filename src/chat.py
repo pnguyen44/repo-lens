@@ -3,7 +3,7 @@ import logging
 from typing import Any, Optional
 
 from chat_client import ChatClient
-from embeddings import Embedder
+from embeddings import Embedder, InputType
 from mcp_client import MCPClient
 from tool_manager import ToolManager
 from anthropic import BadRequestError, RateLimitError
@@ -34,10 +34,12 @@ class Chat:
         self.embedder = embedder
         self.index = index
 
-    def _build_context(self, query: str) -> str:
+    def _build_context(self, query: str) -> str | list[Any]:
         if not self.embedder or not self.index:
             return ""
-        query_vector = self.embedder.generate_embeddings([query])[0]
+        query_vector = self.embedder.generate_embeddings(
+            [query], input_type=InputType.QUERY
+        )[0]
         results = self.index.search(query_vector, k=3)
 
         sources = []
@@ -46,25 +48,17 @@ class Chat:
             logger.debug("Vector search distance: %s", dist)
             if dist <= DISTANCE_THRESHOLD:
                 sources.append(
-                    f'<source repo="{chunk["repo"]}" section="{chunk["section"]}">\n'
-                    f"{chunk['content']}\n"
-                    f"</source>"
+                    self.chat_client.build_document_block(
+                        content=chunk["content"],
+                        title=chunk["url"],
+                    )
                 )
 
         if not sources:
-            context = "No relevant source found"
-        else:
-            context = "\n".join(sources)
+            return ""
+        sources.append({"type": "text", "text": query})
 
-        augmented_query = f"""
-        <context>
-        {context}
-        </context>
-
-        {query}
-        """
-
-        return augmented_query
+        return sources
 
     async def run(self, query: str) -> str:
         final_text_response = ""

@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from chat_client import ChatClient
 from claude import Claude
 from config import create_config
-from embeddings import Embedder, VoyageEmbedder
+from embeddings import Embedder, VoyageEmbedder, InputType
 from vector_index import VectorIndex
 from chunker import chunk_by_section
 from rag_eval_dataset import EVAL_CASES
@@ -42,7 +42,9 @@ class RAGEvaluator:
         if not chunks:
             return 0
 
-        vectors = self.embedder.generate_embeddings(chunks)
+        vectors = self.embedder.generate_embeddings(
+            texts=chunks, input_type=InputType.DOCUMENT
+        )
 
         for vector, chunk in zip(vectors, chunks):
             section = self.identify_section(chunk)
@@ -117,7 +119,9 @@ class RAGEvaluator:
         for case in self.eval_cases:
             question = str(case["question"])
             try:
-                query_vector = self.embedder.generate_embeddings([question])[0]
+                query_vector = self.embedder.generate_embeddings(
+                    [question], input_type=InputType.QUERY
+                )[0]
                 hits = self.index.search(query_vector, k)
                 context = "\n".join([doc["content"] for doc, _dist in hits])
                 answer = self.generate_answer(context=context, question=question)
@@ -143,7 +147,9 @@ class RAGEvaluator:
     def evaluate_retrieval(self, k: int = 3) -> list[dict[str, Any]]:
         """Run each eval case: embed the question, search, compute precision and recall."""
         questions: list[str] = [str(case["question"]) for case in self.eval_cases]
-        query_vectors = self.embedder.generate_embeddings(questions)
+        query_vectors = self.embedder.generate_embeddings(
+            texts=questions, input_type=InputType.QUERY
+        )
 
         results = []
 
