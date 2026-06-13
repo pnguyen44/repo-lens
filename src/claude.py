@@ -1,14 +1,19 @@
+import logging
 from typing import Any, Unpack
 
 from anthropic import Anthropic
 from anthropic.types import Message
 
 from chat_client import ChatClient, ChatParams
+from token_tracker import TokenTracker
+
+logger = logging.getLogger(__name__)
 
 
 class Claude(ChatClient[Anthropic, Message]):
     def __init__(self, client: Anthropic, model: str) -> None:
         super().__init__(client, model)
+        self.token_tracker = TokenTracker()
 
     def build_document_block(self, content: str, title: str) -> dict[str, Any]:
         return {
@@ -36,15 +41,13 @@ class Claude(ChatClient[Anthropic, Message]):
         parts = []
         for block in message.content:
             if block.type == "text":
-                text = block.text
-                if block.citations:
-                    titles = self._extract_citation_titles(message)
-                    if titles:
-                        text += " " + " ".join(f"[{t}]" for t in titles)
+                parts.append(block.text)
 
-                parts.append(text)
-
-        return "\n".join(parts)
+        text = "\n".join(parts)
+        titles = self._extract_citation_titles(message)
+        if titles:
+            text += "\n" + " ".join(f"[{t}]" for t in titles)
+        return text
 
     def _build_params(
         self, messages: list[Any], **kwargs: Unpack[ChatParams]
@@ -61,6 +64,13 @@ class Claude(ChatClient[Anthropic, Message]):
             params["system"] = [
                 {"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}
             ]
+
+        thinking = kwargs.get("thinking", False)
+        thinking_budget = kwargs.get("thinking_budget", 1024)
+
+        if thinking:
+            params["thinking"] = {"type": "enabled", "budget_tokens": thinking_budget}
+            params["temperature"] = 1.0
 
         tools = kwargs.get("tools")
         if tools:
@@ -89,6 +99,14 @@ class Claude(ChatClient[Anthropic, Message]):
 
         response = self.client.messages.create(**params)
 
+        self.token_tracker.record(response.usage)
+        logger.info(
+            "Tokens: in=%d out=%d cache_read=%d",
+            response.usage.input_tokens,
+            response.usage.output_tokens,
+            response.usage.cache_read_input_tokens or 0,
+        )
+
         return response
 
     def chat_stream(self, messages: list[Any], **kwargs: Unpack[ChatParams]) -> Message:
@@ -100,6 +118,15 @@ class Claude(ChatClient[Anthropic, Message]):
             print()
 
         final_message = stream.get_final_message()
+
+        self.token_tracker.record(final_message.usage)
+        logger.info(
+            "Tokens: in=%d out=%d cache_read=%d",
+            final_message.usage.input_tokens,
+            final_message.usage.output_tokens,
+            final_message.usage.cache_read_input_tokens or 0,
+        )
+
         titles = self._extract_citation_titles(final_message)
 
         if titles:

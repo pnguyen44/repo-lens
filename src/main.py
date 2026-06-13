@@ -1,5 +1,7 @@
+import logging
+import os
 from contextlib import AsyncExitStack
-from math import e
+
 from config import create_config
 from claude import Claude
 from anthropic import Anthropic
@@ -11,10 +13,9 @@ from chat import Chat
 from voyageai.client import Client as VoyageClient
 from embeddings import Embedder, VoyageEmbedder
 from vector_index import VectorIndex
-import logging
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=os.getenv("LOG_LEVEL", "INFO").upper(),
     format="%(asctime)s %(name)s %(levelname)s %(message)s",
 )
 
@@ -118,17 +119,20 @@ async def main() -> None:
             index=index,
         )
 
-        while True:
-            user_input = input("> ")
-            if user_input.lower() in ("quit", "exit"):
-                break
-            await chat.run(user_input)
+        try:
+            while True:
+                user_input = input("> ")
+                if user_input.lower() in ("quit", "exit"):
+                    break
+                await chat.run(user_input)
+        except KeyboardInterrupt:
+            print("\nexiting")
+        finally:
+            print(claude.token_tracker.summary())
 
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
-    except KeyboardInterrupt:
-        print("\n exiting")
     except Exception as e:
         logger.error("Unexpected error: %s", e)

@@ -6,7 +6,9 @@ from mcp_client import MCPClient
 
 
 class FakeEmbedder:
-    def generate_embeddings(self, texts: list[str]) -> list[list[float]]:
+    def generate_embeddings(
+        self, texts: list[str], **kwargs: object
+    ) -> list[list[float]]:
         return [[1.0, 0.0, 0.0] for _ in texts]
 
 

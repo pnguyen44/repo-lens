@@ -1,18 +1,20 @@
-import json
 import logging
 import textwrap
 from pathlib import Path
 from typing import Any
 from anthropic import Anthropic
 from dotenv import load_dotenv
+from chat import MAX_RETRIES
 from chat_client import ChatClient
 from claude import Claude
 from config import create_config
 from embeddings import Embedder, VoyageEmbedder, InputType
+from structured_output import parse_with_retry
 from vector_index import VectorIndex
 from chunker import chunk_by_section
 from rag_eval_dataset import EVAL_CASES
 from voyageai.client import Client as VoyageClient
+from models import FaithfulnessVerdict
 
 logger = logging.getLogger(__name__)
 
@@ -90,27 +92,20 @@ class RAGEvaluator:
         self.chat_client.add_user_message(messages=messages, content=eval_prompt)
         self.chat_client.add_assistant_message(messages=messages, message="```json")
         response = self.chat_client.chat(messages=messages, stop_sequences=["```"])
-        text = self.chat_client.text_from_message(response)
-
-        fallback = {
-            "verdict": "unknown",
-            "reasoning": "Failed to parse grade",
-        }
 
         try:
-            result: dict[str, Any] = json.loads(text)
-        except json.JSONDecodeError:
-            return fallback
-
-        if not isinstance(result, dict):
-            return fallback
-
-        required_keys = {"verdict", "reasoning"}
-
-        if not required_keys.issubset(result.keys()):
-            return fallback
-
-        return result
+            return parse_with_retry(
+                chat_client=self.chat_client,
+                response=response,
+                messages=messages,
+                model_type=FaithfulnessVerdict,
+                max_retries=MAX_RETRIES,
+            ).model_dump()
+        except ValueError:
+            return {
+                "verdict": "unknown",
+                "reasoning": "Failed to parse grade",
+            }
 
     def evaluate_faithfulness(self, k: int = 3) -> list[dict[str, Any]]:
         if not self.chat_client:
@@ -190,11 +185,11 @@ class RAGEvaluator:
             if "keyword_recall" in r:
                 print(f"  Keyword Recall: {r['keyword_recall']:.2f}")
 
-            if "judgement" in r:
+            if r.get("judgement"):
                 print(f"  Faithfulness: {r['judgement']['verdict']}")
 
         print("\n---")
-        verdicts = [r["judgement"]["verdict"] for r in results if "judgement" in r]
+        verdicts = [r["judgement"]["verdict"] for r in results if r.get("judgement")]
         if verdicts:
             grounded = verdicts.count("grounded")
             print(f"Faithfulness: {grounded}/{len(verdicts)} grounded")

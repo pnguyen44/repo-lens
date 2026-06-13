@@ -3,11 +3,16 @@ import logging
 import sys
 from typing import Any
 from anthropic import Anthropic
+from pydantic import TypeAdapter, ValidationError
 from chat_client import ChatClient
 from claude import Claude
 from config import create_config
+from models import GradeResult, TestCase
+from structured_output import parse_with_retry
 
 logger = logging.getLogger(__name__)
+
+adapter = TypeAdapter(list[TestCase])
 
 
 class PromptEvaluator:
@@ -40,19 +45,18 @@ class PromptEvaluator:
         text = self.client.text_from_message(response)
 
         try:
-            result: list[dict[str, Any]] = json.loads(text)
-        except json.JSONDecodeError:
+            result = adapter.validate_json(text)
+            return [case.model_dump() for case in result]
+        except ValidationError:
             if max_tries > 0:
                 logger.warning("Failed to parse generated dataset. Retrying")
                 return self.generate_dataset(prompt, total_tests, max_tries - 1)
             logger.error("Failed to generate valid dataset after retries.")
             return []
 
-        return result
-
     def run_prompt(self, prompt: str, test_case: dict[str, Any]) -> str:
         prompt = prompt.strip()
-        separator = "" if prompt[-1] in ".?!:" else ":"
+        separator = "" if prompt and prompt[-1] in ".?!:" else ":"
         message = f"""
         {prompt}{separator}
         <input>
@@ -78,33 +82,21 @@ class PromptEvaluator:
         self.client.add_user_message(messages=messages, content=eval_prompt)
         self.client.add_assistant_message(messages, "```json")
         response = self.client.chat(messages=messages, stop_sequences=["```"])
-        text = self.client.text_from_message(response)
-
-        fallback = {
-            "strengths": [],
-            "weaknesses": [],
-            "reasoning": "Failed to parse grade",
-            "score": 0,
-        }
-        try:
-            result: dict[str, Any] = json.loads(text)
-        except json.JSONDecodeError:
-            return fallback
-
-        if not isinstance(result, dict):
-            return fallback
-
-        required_keys = {"score", "strengths", "weaknesses", "reasoning"}
-
-        if not required_keys.issubset(result.keys()):
-            return fallback
 
         try:
-            result["score"] = int(result["score"])
-        except (TypeError, ValueError):
-            return fallback
-
-        return result
+            return parse_with_retry(
+                chat_client=self.client,
+                response=response,
+                messages=messages,
+                model_type=GradeResult,
+            ).model_dump()
+        except ValueError:
+            return {
+                "strengths": [],
+                "weaknesses": [],
+                "reasoning": "Failed to parse grade",
+                "score": 0,
+            }
 
     def run_test_case(self, prompt: str, test_case: dict[str, Any]) -> dict[str, Any]:
         output = self.run_prompt(prompt, test_case)
