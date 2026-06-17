@@ -25,6 +25,7 @@ class Chat:
         system_prompt: str | None = None,
         embedder: Optional[Embedder] = None,
         index: Optional[VectorIndex] = None,
+        web_search: bool = True,
     ) -> None:
         self.chat_client = chat_client
         self.mcp_clients = mcp_clients
@@ -33,6 +34,7 @@ class Chat:
         self.messages: list[Any] = []
         self.embedder = embedder
         self.index = index
+        self.web_search = web_search
 
     def _build_context(self, query: str) -> str | list[Any]:
         if not self.embedder or not self.index:
@@ -73,7 +75,10 @@ class Chat:
         while True:
             try:
                 response = self.chat_client.chat_stream(
-                    messages=self.messages, tools=self.tools, system=self.system_prompt
+                    messages=self.messages,
+                    tools=self.tools,
+                    system=self.system_prompt,
+                    web_search=self.web_search,
                 )
 
                 self.chat_client.add_assistant_message(self.messages, response)

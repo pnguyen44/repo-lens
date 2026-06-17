@@ -49,3 +49,43 @@ def test_chat_includes_system_when_provided() -> None:
 
     call_kwargs = mock_client.messages.create.call_args[1]
     assert "system" in call_kwargs
+
+
+def test_build_params_web_search_enabled() -> None:
+    chat_client = Claude(client=MagicMock(), model=model)
+    messages: list[Any] = [{"role": "user", "content": "hello"}]
+    params = chat_client._build_params(messages, web_search=True)
+
+    assert "tools" in params
+    assert params["tools"][-1]["type"] == "web_search_20250305"
+
+
+def test_build_params_no_web_search_by_default() -> None:
+    chat_client = Claude(client=MagicMock(), model=model)
+    messages: list[Any] = [{"role": "user", "content": "hello"}]
+    params = chat_client._build_params(messages)
+
+    assert "tools" not in params
+
+
+def test_build_params_thinking() -> None:
+    chat_client = Claude(client=MagicMock(), model=model)
+    messages: list[Any] = [{"role": "user", "content": "hello"}]
+    params = chat_client._build_params(
+        messages, thinking=True, thinking_budget=2048, temperature=0.5
+    )
+
+    assert params["thinking"] == {"type": "enabled", "budget_tokens": 2048}
+    assert params["temperature"] == 1.0
+
+
+def test_build_params_caches_last_tool() -> None:
+    chat_client = Claude(client=MagicMock(), model=model)
+    messages: list[Any] = [{"role": "user", "content": "hello"}]
+    tools = [{"name": "tool_a"}, {"name": "tool_b"}]
+
+    params = chat_client._build_params(messages, tools=tools)
+
+    assert params["tools"][-1]["cache_control"] == {"type": "ephemeral"}
+    assert "cache_control" not in params["tools"][0]
+    assert "cache_control" not in tools[-1]

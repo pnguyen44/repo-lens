@@ -25,6 +25,12 @@ packages = ["src"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
+extraPaths = ["./src"]
+typeCheckingMode = "off"
+
 [tool.mypy]
 strict = true
 files = ["src", "tests"]

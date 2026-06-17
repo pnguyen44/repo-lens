@@ -12,6 +12,7 @@ class ChatParams(TypedDict, total=False):
     stop_sequences: list[str] | None
     thinking: bool | None
     thinking_budget: int | None
+    web_search: bool | None
 
 
 # T = the LLM client type (Anthropic, OpenAI, etc.)

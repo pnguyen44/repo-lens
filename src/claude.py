@@ -2,12 +2,14 @@ import logging
 from typing import Any, Unpack
 
 from anthropic import Anthropic
-from anthropic.types import Message
+from anthropic.types import Message, Usage
 
 from chat_client import ChatClient, ChatParams
 from token_tracker import TokenTracker
 
 logger = logging.getLogger(__name__)
+
+WEB_SEARCH_MAX_USES = 5
 
 
 class Claude(ChatClient[Anthropic, Message]):
@@ -72,13 +74,26 @@ class Claude(ChatClient[Anthropic, Message]):
             params["thinking"] = {"type": "enabled", "budget_tokens": thinking_budget}
             params["temperature"] = 1.0
 
-        tools = kwargs.get("tools")
+        tools = kwargs.get("tools", [])
+        tools_list: list[Any] = []
         if tools:
             tools_clone = tools.copy()
             last_tool = {**tools_clone[-1]}
             last_tool["cache_control"] = {"type": "ephemeral"}
             tools_clone[-1] = last_tool
-            params["tools"] = tools_clone
+            tools_list.extend(tools_clone)
+
+        if kwargs.get("web_search"):
+            tools_list.append(
+                {
+                    "type": "web_search_20250305",
+                    "name": "web_search",
+                    "max_uses": WEB_SEARCH_MAX_USES,
+                }
+            )
+
+        if tools_list:
+            params["tools"] = tools_list
 
         tool_choice = kwargs.get("tool_choice")
         if tool_choice:
@@ -94,18 +109,21 @@ class Claude(ChatClient[Anthropic, Message]):
 
         return params
 
+    def _record_usage(self, usage: Usage) -> None:
+        self.token_tracker.record(usage)
+        logger.info(
+            "Tokens: in=%d out=%d cache_read=%d",
+            usage.input_tokens,
+            usage.output_tokens,
+            usage.cache_read_input_tokens or 0,
+        )
+
     def chat(self, messages: list[Any], **kwargs: Unpack[ChatParams]) -> Message:
         params = self._build_params(messages=messages, **kwargs)
 
         response = self.client.messages.create(**params)
 
-        self.token_tracker.record(response.usage)
-        logger.info(
-            "Tokens: in=%d out=%d cache_read=%d",
-            response.usage.input_tokens,
-            response.usage.output_tokens,
-            response.usage.cache_read_input_tokens or 0,
-        )
+        self._record_usage(response.usage)
 
         return response
 
@@ -119,13 +137,10 @@ class Claude(ChatClient[Anthropic, Message]):
 
         final_message = stream.get_final_message()
 
-        self.token_tracker.record(final_message.usage)
-        logger.info(
-            "Tokens: in=%d out=%d cache_read=%d",
-            final_message.usage.input_tokens,
-            final_message.usage.output_tokens,
-            final_message.usage.cache_read_input_tokens or 0,
-        )
+        self._record_usage(final_message.usage)
+
+        if any(b.type == "web_search_tool_result" for b in final_message.content):
+            logger.info("Web search tool called")
 
         titles = self._extract_citation_titles(final_message)
 
