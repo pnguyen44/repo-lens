@@ -222,7 +222,7 @@ def main() -> None:
     config = create_config()
     try:
         index = VectorIndex()
-        embedder = VoyageEmbedder(VoyageClient())
+        embedder = VoyageEmbedder(VoyageClient(), model=config.voyage_embed_model)
         chat_client = Claude(client=Anthropic(), model=config.claude_model)
 
         rag_evaluator = RAGEvaluator(

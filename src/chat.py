@@ -8,6 +8,7 @@ from mcp_client import MCPClient
 from tool_manager import ToolManager
 from anthropic import BadRequestError, RateLimitError
 from vector_index import VectorIndex
+from reranker import Reranker
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,7 @@ class Chat:
         embedder: Optional[Embedder] = None,
         index: Optional[VectorIndex] = None,
         web_search: bool = True,
+        reranker: Optional[Reranker] = None,
     ) -> None:
         self.chat_client = chat_client
         self.mcp_clients = mcp_clients
@@ -35,32 +37,52 @@ class Chat:
         self.embedder = embedder
         self.index = index
         self.web_search = web_search
+        self.reranker = reranker
 
     def _build_context(self, query: str) -> str | list[Any]:
         if not self.embedder or not self.index:
             return ""
-        query_vector = self.embedder.generate_embeddings(
-            [query], input_type=InputType.QUERY
-        )[0]
-        results = self.index.search(query_vector, k=3)
 
-        sources = []
+        try:
+            query_vector = self.embedder.generate_embeddings(
+                [query], input_type=InputType.QUERY
+            )[0]
+            results = self.index.search(
+                query=query_vector, k=15 if self.reranker else 3
+            )
 
-        for chunk, dist in results:
-            logger.debug("Vector search distance: %s", dist)
-            if dist <= DISTANCE_THRESHOLD:
-                sources.append(
-                    self.chat_client.build_document_block(
-                        content=chunk["content"],
-                        title=chunk["url"],
-                    )
+            if self.reranker:
+                docs = [doc["content"] for (doc, _dist) in results]
+                reranked = self.reranker.rerank(query=query, documents=docs, top_k=3)
+                chunks = []
+                for r in reranked:
+                    if 0 <= r.index < len(results):
+                        chunks.append(results[r.index][0])
+                    else:
+                        logger.warning(
+                            "Reranker returned out-of-bounds index: %d", r.index
+                        )
+
+            else:
+                chunks = [
+                    chunk for chunk, dist in results if dist <= DISTANCE_THRESHOLD
+                ]
+
+            sources = [
+                self.chat_client.build_document_block(
+                    content=c["content"], title=c["url"]
                 )
+                for c in chunks
+            ]
 
-        if not sources:
+            if not sources:
+                return ""
+            sources.append({"type": "text", "text": query})
+
+            return sources
+        except Exception:
+            logger.warning("context retrieval failed, proceeding without RAG")
             return ""
-        sources.append({"type": "text", "text": query})
-
-        return sources
 
     async def run(self, query: str) -> str:
         final_text_response = ""

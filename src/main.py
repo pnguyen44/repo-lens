@@ -1,7 +1,6 @@
 import logging
 import os
 from contextlib import AsyncExitStack
-
 from config import create_config
 from claude import Claude
 from anthropic import Anthropic
@@ -12,6 +11,7 @@ import asyncio
 from chat import Chat
 from voyageai.client import Client as VoyageClient
 from embeddings import Embedder, VoyageEmbedder
+from reranker import VoyageReranker
 from vector_index import VectorIndex
 
 logging.basicConfig(
@@ -102,7 +102,7 @@ async def main() -> None:
 
         claude = Claude(client=client, model=config.claude_model)
 
-        embedder = VoyageEmbedder(VoyageClient())
+        embedder = VoyageEmbedder(VoyageClient(), model=config.voyage_embed_model)
         index = VectorIndex()
 
         repo = await prompt_and_index(
@@ -111,12 +111,17 @@ async def main() -> None:
 
         print(f"Chatting about {owner}/{repo}")
 
+        reranker = VoyageReranker(
+            client=VoyageClient(), model=config.voyage_rerank_model
+        )
+
         chat = Chat(
             chat_client=claude,
             mcp_clients={"github": github_mcp},
             system_prompt=build_system_prompt(config.default_org),
             embedder=embedder,
             index=index,
+            reranker=reranker,
         )
 
         try:

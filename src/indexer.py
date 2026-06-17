@@ -62,7 +62,7 @@ async def index_repo(
 
 async def main() -> None:
     config = create_config()
-    embedder = VoyageEmbedder(VoyageClient())
+    embedder = VoyageEmbedder(VoyageClient(), model=config.voyage_embed_model)
     index = VectorIndex()
     owner = "openshift-hyperfleet"
     repo = "hyperfleet-api"
