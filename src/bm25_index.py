@@ -3,6 +3,8 @@ import re
 from collections import Counter
 from typing import Any, Callable, Optional
 
+from hybrid_retriever import validate_document
+
 
 class BM25Index:
     def __init__(
@@ -29,21 +31,26 @@ class BM25Index:
         return [token for token in tokens if token]
 
     def add_document(self, document: dict[str, Any]) -> None:
-        if not isinstance(document, dict):
-            raise TypeError("Document must be a dictionary.")
+        validate_document(document)
 
-        if "content" not in document:
-            raise ValueError("Document dictionary must contain a 'content' key.")
-        content = document.get("content", "")
-
-        if not isinstance(content, str):
-            raise TypeError("Document 'content' must be a string.")
-
-        doc_tokens = self._tokenizer(content)
+        doc_tokens = self._tokenizer(document["content"])
         self._tokenized_docs.append(doc_tokens)
 
         self.documents.append(document)
         self._update_doc_stats(doc_tokens)
+
+    def add_documents(self, documents: list[dict[str, Any]]) -> None:
+        if not documents:
+            return
+
+        for i, document in enumerate(documents):
+            validate_document(document=document, index=i)
+
+        for document in documents:
+            doc_tokens = self._tokenizer(document["content"])
+            self._tokenized_docs.append(doc_tokens)
+            self.documents.append(document)
+            self._update_doc_stats(doc_tokens)
 
     def _update_doc_stats(self, doc_tokens: list[str]) -> None:
         # Record this document's token count

@@ -31,13 +31,12 @@ def mock_mcp_client():
 @pytest.mark.asyncio
 async def test_rag_end_to_end(mock_mcp_client, fake_embedder):
     embedder = fake_embedder
-    index = VectorIndex()
+    index = VectorIndex(embedding_fn=embedder.generate_embeddings)
     owner = "openshift-hyperfleet"
     repo = "hyperfleet-api"
 
     count = await index_repo(
         mcp_client=MagicMock(spec=MCPClient),
-        embedder=embedder,
         index=index,
         owner=owner,
         repo=repo,
@@ -61,7 +60,6 @@ async def test_index_repo_empty_readme(fake_embedder):
         index = VectorIndex()
         count = await index_repo(
             mcp_client=MagicMock(spec=MCPClient),
-            embedder=fake_embedder,
             index=index,
             owner="org",
             repo="repo",
@@ -81,10 +79,9 @@ async def test_index_repo_empty_readme(fake_embedder):
 )
 async def test_index_repo_chunk_counts(fake_embedder, readme, expected_chunks):
     with patch("indexer.fetch_readme", new_callable=AsyncMock, return_value=readme):
-        index = VectorIndex()
+        index = VectorIndex(embedding_fn=fake_embedder.generate_embeddings)
         count = await index_repo(
             mcp_client=MagicMock(spec=MCPClient),
-            embedder=fake_embedder,
             index=index,
             owner="org",
             repo="repo",
@@ -104,7 +101,6 @@ async def test_index_repo_propagates_fetch_error(fake_embedder):
         with pytest.raises(ValueError, match="No README context found"):
             await index_repo(
                 mcp_client=MagicMock(spec=MCPClient),
-                embedder=fake_embedder,
                 index=index,
                 owner="org",
                 repo="repo",

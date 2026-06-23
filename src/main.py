@@ -10,7 +10,7 @@ from mcp_client import MCPClient, create_github_client
 import asyncio
 from chat import Chat
 from voyageai.client import Client as VoyageClient
-from embeddings import Embedder, VoyageEmbedder
+from embeddings import Embedder, VoyageEmbedder, InputType
 from reranker import VoyageReranker
 from vector_index import VectorIndex
 
@@ -77,7 +77,6 @@ async def prompt_and_index(
         try:
             await index_repo(
                 mcp_client=github_mcp,
-                embedder=embedder,
                 index=index,
                 owner=owner,
                 repo=repo,
@@ -103,7 +102,11 @@ async def main() -> None:
         claude = Claude(client=client, model=config.claude_model)
 
         embedder = VoyageEmbedder(VoyageClient(), model=config.voyage_embed_model)
-        index = VectorIndex()
+        index = VectorIndex(
+            embedding_fn=lambda texts: embedder.generate_embeddings(
+                texts, input_type=InputType.DOCUMENT
+            )
+        )
 
         repo = await prompt_and_index(
             github_mcp=github_mcp, embedder=embedder, index=index, owner=owner

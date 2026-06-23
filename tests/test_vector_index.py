@@ -119,8 +119,8 @@ def test_add_document_raises_without_embedding_fn() -> None:
 
 
 def test_add_document_uses_embedding_fn() -> None:
-    def fake_embed(text: str) -> list[float]:
-        return [1.0, 2.0, 3.0]
+    def fake_embed(texts: list[str]) -> list[list[float]]:
+        return [[1.0, 2.0, 3.0] for _ in texts]
 
     index = VectorIndex(embedding_fn=fake_embed)
 
@@ -128,3 +128,52 @@ def test_add_document_uses_embedding_fn() -> None:
 
     assert len(index) == 1
     assert index.vectors[0] == [1.0, 2.0, 3.0]
+
+
+def test_add_documents_stores_all_documents() -> None:
+    def fake_embed(texts: list[str]) -> list[list[float]]:
+        return [[float(i), 0.0, 0.0] for i in range(len(texts))]
+
+    index = VectorIndex(embedding_fn=fake_embed)
+    docs = [
+        {"content": "first", "section": "intro"},
+        {"content": "second", "section": "body"},
+        {"content": "third", "section": "end"},
+    ]
+
+    index.add_documents(docs)
+
+    assert len(index) == 3
+    assert index.documents[0]["content"] == "first"
+    assert index.documents[2]["section"] == "end"
+    assert index.vectors[1] == [1.0, 0.0, 0.0]
+
+
+def test_add_documents_raises_without_embedding_fn() -> None:
+    index = VectorIndex()
+
+    with pytest.raises(ValueError, match="Embedding function not provided"):
+        index.add_documents([{"content": "hello"}])
+
+
+def test_add_documents_validates_documents() -> None:
+    def fake_embed(texts: list[str]) -> list[list[float]]:
+        return [[1.0, 0.0] for _ in texts]
+
+    index = VectorIndex(embedding_fn=fake_embed)
+
+    with pytest.raises(ValueError, match="Document at index 1"):
+        index.add_documents([{"content": "valid"}, {"wrong_key": "invalid"}])
+
+    assert len(index) == 0
+
+
+def test_add_documents_empty_list() -> None:
+    def fake_embed(texts: list[str]) -> list[list[float]]:
+        raise AssertionError("Should not be called")
+
+    index = VectorIndex(embedding_fn=fake_embed)
+
+    index.add_documents([])
+
+    assert len(index) == 0

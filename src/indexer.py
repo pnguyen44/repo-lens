@@ -1,5 +1,5 @@
 import logging
-from embeddings import Embedder, VoyageEmbedder, InputType
+from embeddings import VoyageEmbedder, InputType
 from mcp_client import MCPClient, create_github_client
 import asyncio
 from config import create_config
@@ -36,7 +36,7 @@ async def fetch_readme(mcp_client: MCPClient, owner: str, repo: str) -> str:
 
 
 async def index_repo(
-    mcp_client: MCPClient, embedder: Embedder, index: VectorIndex, owner: str, repo: str
+    mcp_client: MCPClient, index: VectorIndex, owner: str, repo: str
 ) -> int:
     """Fetch repo README, chunk it, embed each chunk, and store in the index."""
     readme = await fetch_readme(mcp_client=mcp_client, owner=owner, repo=repo)
@@ -48,29 +48,34 @@ async def index_repo(
     repo_name = f"{owner}/{repo}"
     logger.info("Indexing %s", repo_name)
 
-    vectors = embedder.generate_embeddings(texts=chunks, input_type=InputType.DOCUMENT)
-    for vector, chunk in zip(vectors, chunks):
+    documents = []
+    for chunk in chunks:
         section = chunk.split("\n", 1)[0].lstrip("# ").strip()
         anchor = to_github_anchor(section)
         url = f"https://github.com/{owner}/{repo}/blob/main/README.md#{anchor}"
-        index.add_vector(
-            vector,
-            {"content": chunk, "repo": repo_name, "section": section, "url": url},
+        documents.append(
+            {"content": chunk, "repo": repo_name, "section": section, "url": url}
         )
+
+    index.add_documents(documents)
     return len(index.vectors)
 
 
 async def main() -> None:
     config = create_config()
     embedder = VoyageEmbedder(VoyageClient(), model=config.voyage_embed_model)
-    index = VectorIndex()
     owner = "openshift-hyperfleet"
     repo = "hyperfleet-api"
+
+    index = VectorIndex(
+        embedding_fn=lambda texts: embedder.generate_embeddings(
+            texts=texts, input_type=InputType.DOCUMENT
+        )
+    )
 
     async with create_github_client(config.github_token) as mcp_client:
         count = await index_repo(
             mcp_client=mcp_client,
-            embedder=embedder,
             index=index,
             owner=owner,
             repo=repo,

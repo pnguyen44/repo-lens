@@ -2,6 +2,7 @@ from typing import Any, Callable, Optional
 import math
 
 from enum import Enum
+from hybrid_retriever import validate_document
 
 
 class DistanceMetric(Enum):
@@ -13,7 +14,7 @@ class VectorIndex:
     def __init__(
         self,
         distance_metric: DistanceMetric = DistanceMetric.COSINE,
-        embedding_fn: Callable[[str], list[float]] | None = None,
+        embedding_fn: Callable[[list[str]], list[list[float]]] | None = None,
     ) -> None:
         self.vectors: list[list[float]] = []
         self.documents: list[dict[str, Any]] = []
@@ -46,24 +47,36 @@ class VectorIndex:
         self.documents.append(document)
 
     def add_document(self, document: dict[str, Any]) -> None:
+        validate_document(document)
+
         if not self._embedding_fn:
             raise ValueError("Embedding function not provided during initialization.")
 
-        if "content" not in document:
-            raise ValueError("Document dictionary must contain a 'content' key.")
-        content = document["content"]
+        vector = self._embedding_fn([document["content"]])[0]
 
-        if not isinstance(content, str):
-            raise TypeError("Document 'content' must be a string.")
-
-        vector = self._embedding_fn(content)
         self.add_vector(vector=vector, document=document)
+
+    def add_documents(self, documents: list[dict[str, Any]]) -> None:
+        if not self._embedding_fn:
+            raise ValueError("Embedding function not provided during initialization.")
+
+        if not documents:
+            return
+
+        contents = []
+        for i, document in enumerate(documents):
+            validate_document(document=document, index=i)
+            contents.append(document["content"])
+        vectors = self._embedding_fn(contents)
+
+        for vector, document in zip(vectors, documents):
+            self.add_vector(vector=vector, document=document)
 
     def _resolve_query_vector(self, query: Any) -> list[float]:
         if isinstance(query, str):
             if not self._embedding_fn:
                 raise ValueError("Embedding function not provided for string query.")
-            return self._embedding_fn(query)
+            return self._embedding_fn([query])[0]
         elif isinstance(query, list) and all(
             isinstance(x, (int, float)) for x in query
         ):
