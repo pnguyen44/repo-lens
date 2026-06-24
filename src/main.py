@@ -10,9 +10,11 @@ from mcp_client import MCPClient, create_github_client
 import asyncio
 from chat import Chat
 from voyageai.client import Client as VoyageClient
-from embeddings import Embedder, VoyageEmbedder, InputType
+from embeddings import VoyageEmbedder, InputType
 from reranker import VoyageReranker
 from vector_index import VectorIndex
+from bm25_index import BM25Index
+from hybrid_retriever import HybridRetriever
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO").upper(),
@@ -68,7 +70,7 @@ async def validate_repo(github_mcp: MCPClient, owner: str, repo: str) -> bool:
 
 
 async def prompt_and_index(
-    github_mcp: MCPClient, embedder: Embedder, index: VectorIndex, owner: str
+    github_mcp: MCPClient, retriever: HybridRetriever, owner: str
 ) -> str:
     while True:
         repo = input("> Repo name: ")
@@ -77,7 +79,7 @@ async def prompt_and_index(
         try:
             await index_repo(
                 mcp_client=github_mcp,
-                index=index,
+                hybrid_retriever=retriever,
                 owner=owner,
                 repo=repo,
             )
@@ -102,14 +104,16 @@ async def main() -> None:
         claude = Claude(client=client, model=config.claude_model)
 
         embedder = VoyageEmbedder(VoyageClient(), model=config.voyage_embed_model)
-        index = VectorIndex(
+        vector_index = VectorIndex(
             embedding_fn=lambda texts: embedder.generate_embeddings(
                 texts, input_type=InputType.DOCUMENT
             )
         )
+        bm25 = BM25Index()
+        retriever = HybridRetriever(vector_index, bm25)
 
         repo = await prompt_and_index(
-            github_mcp=github_mcp, embedder=embedder, index=index, owner=owner
+            github_mcp=github_mcp, retriever=retriever, owner=owner
         )
 
         print(f"Chatting about {owner}/{repo}")
@@ -123,7 +127,7 @@ async def main() -> None:
             mcp_clients={"github": github_mcp},
             system_prompt=build_system_prompt(config.default_org),
             embedder=embedder,
-            index=index,
+            hybrid_retriever=retriever,
             reranker=reranker,
         )
 

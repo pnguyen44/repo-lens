@@ -57,34 +57,34 @@ class TestSearch:
         self, loaded_index: BM25Index
     ) -> None:
         query = "Python programming"
-        results = loaded_index.search(query_text=query, k=3)
+        results = loaded_index.search(query=query, k=3)
 
         assert results[0][0]["content"] == DOCS[0]["content"]
         assert results[0][1] < results[-1][1]
 
     def test_returns_empty_list_when_no_documents(self) -> None:
         index = BM25Index()
-        results = index.search(query_text="anything", k=3)
+        results = index.search(query="anything", k=3)
         assert results == []
 
     def test_returns_empty_list_when_no_matching_terms(
         self, loaded_index: BM25Index
     ) -> None:
-        results = loaded_index.search(query_text="Rust concurrency", k=3)
+        results = loaded_index.search(query="Rust concurrency", k=3)
         assert results == []
 
     @pytest.mark.parametrize("k", [1, 3])
     def test_respects_k_parameter(self, loaded_index: BM25Index, k: int) -> None:
         query = "Python programming"
-        results = loaded_index.search(query_text=query, k=k)
+        results = loaded_index.search(query=query, k=k)
 
         assert len(results) == k
 
     def test_lower_score_means_more_relevant(self, loaded_index: BM25Index) -> None:
-        results = loaded_index.search(query_text="TensorFlow models", k=3)
+        results = loaded_index.search(query="TensorFlow models", k=3)
         scores = [score for _, score in results]
         assert scores == sorted(scores)
 
     def test_rejects_non_string_query(self, loaded_index: BM25Index) -> None:
         with pytest.raises(TypeError):
-            loaded_index.search(query_text=123, k=3)  # type: ignore[arg-type]
+            loaded_index.search(query=123, k=3)  # type: ignore[arg-type]

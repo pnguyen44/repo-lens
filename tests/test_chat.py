@@ -3,20 +3,24 @@ from unittest.mock import MagicMock
 from chat import Chat
 import pytest
 
+from hybrid_retriever import HybridRetriever
 from vector_index import VectorIndex
 
 
-def _make_chat(index: VectorIndex) -> Chat:
-    embedder = MagicMock()
-    embedder.generate_embeddings.return_value = [[1.0, 0.0, 0.0]]
+def _fake_embed(texts: list[str]) -> list[list[float]]:
+    return [[1.0, 0.0, 0.0] for _ in texts]
 
+
+def _make_chat(index: VectorIndex) -> Chat:
     mock_client = MagicMock()
     mock_client.build_document_block.side_effect = lambda content, title: {
         "type": "text",
         "text": f'<source title="{title}">\n{content}\n</source>',
     }
 
-    return Chat(chat_client=mock_client, mcp_clients={}, embedder=embedder, index=index)
+    retriever = HybridRetriever(index)
+
+    return Chat(chat_client=mock_client, mcp_clients={}, hybrid_retriever=retriever)
 
 
 def _flatten_content(result: str | list[Any]) -> str:
@@ -89,7 +93,7 @@ CONTEXT_CASES = [
 
 @pytest.mark.parametrize("case", CONTEXT_CASES, ids=lambda c: c["name"])
 def test_build_context(case) -> None:
-    index = VectorIndex()
+    index = VectorIndex(embedding_fn=_fake_embed)
     for vec, doc in case["vectors"]:
         index.add_vector(vec, doc)
 
@@ -108,7 +112,7 @@ def test_build_context(case) -> None:
 
 
 def test_build_context_empty_index() -> None:
-    index = VectorIndex()
+    index = VectorIndex(embedding_fn=_fake_embed)
     chat = _make_chat(index)
     result = chat._build_context("test query")
 

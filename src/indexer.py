@@ -1,5 +1,7 @@
 import logging
+from bm25_index import BM25Index
 from embeddings import VoyageEmbedder, InputType
+from hybrid_retriever import HybridRetriever
 from mcp_client import MCPClient, create_github_client
 import asyncio
 from config import create_config
@@ -36,7 +38,7 @@ async def fetch_readme(mcp_client: MCPClient, owner: str, repo: str) -> str:
 
 
 async def index_repo(
-    mcp_client: MCPClient, index: VectorIndex, owner: str, repo: str
+    mcp_client: MCPClient, hybrid_retriever: HybridRetriever, owner: str, repo: str
 ) -> int:
     """Fetch repo README, chunk it, embed each chunk, and store in the index."""
     readme = await fetch_readme(mcp_client=mcp_client, owner=owner, repo=repo)
@@ -57,8 +59,8 @@ async def index_repo(
             {"content": chunk, "repo": repo_name, "section": section, "url": url}
         )
 
-    index.add_documents(documents)
-    return len(index.vectors)
+    hybrid_retriever.add_documents(documents)
+    return len(hybrid_retriever)
 
 
 async def main() -> None:
@@ -67,16 +69,20 @@ async def main() -> None:
     owner = "openshift-hyperfleet"
     repo = "hyperfleet-api"
 
-    index = VectorIndex(
+    vector_index = VectorIndex(
         embedding_fn=lambda texts: embedder.generate_embeddings(
             texts=texts, input_type=InputType.DOCUMENT
         )
     )
 
+    bm25 = BM25Index()
+
+    retriever = HybridRetriever(vector_index, bm25)
+
     async with create_github_client(config.github_token) as mcp_client:
         count = await index_repo(
             mcp_client=mcp_client,
-            index=index,
+            hybrid_retriever=retriever,
             owner=owner,
             repo=repo,
         )
@@ -85,10 +91,8 @@ async def main() -> None:
 
         query = "How does the API work?"
         print(f'Query: "{query}"\n')
-        query_vector = embedder.generate_embeddings(
-            texts=[query], input_type=InputType.QUERY
-        )[0]
-        results = index.search(query_vector, k=NUM_RESULTS)
+
+        results = retriever.search(query_text=query, k=NUM_RESULTS)
 
         for i, (doc, distance) in enumerate(results, 1):
             print(f"Result {i} (distance: {distance:.4f})")

@@ -1,4 +1,6 @@
 import pytest
+from bm25_index import BM25Index
+from hybrid_retriever import HybridRetriever
 from indexer import index_repo
 from vector_index import VectorIndex
 from unittest.mock import patch, AsyncMock, MagicMock
@@ -30,14 +32,15 @@ def mock_mcp_client():
 
 @pytest.mark.asyncio
 async def test_rag_end_to_end(mock_mcp_client, fake_embedder):
-    embedder = fake_embedder
-    index = VectorIndex(embedding_fn=embedder.generate_embeddings)
+    vector_index = VectorIndex(embedding_fn=fake_embedder.generate_embeddings)
+    bm25 = BM25Index()
+    retriever = HybridRetriever(vector_index, bm25)
     owner = "openshift-hyperfleet"
     repo = "hyperfleet-api"
 
     count = await index_repo(
         mcp_client=MagicMock(spec=MCPClient),
-        index=index,
+        hybrid_retriever=retriever,
         owner=owner,
         repo=repo,
     )
@@ -45,27 +48,27 @@ async def test_rag_end_to_end(mock_mcp_client, fake_embedder):
     assert count == 3
 
     query = "how does API work?"
-    query_vector = embedder.generate_embeddings([query])[0]
-    k = 2
-    results = index.search(query=query_vector, k=k)
+    results = retriever.search(query_text=query, k=2)
     assert len(results) > 0
     assert results[0][0]["repo"] == f"{owner}/{repo}"
-    assert len(index) == 3
+    assert len(retriever) == 3
     assert "section" in results[0][0]
 
 
 @pytest.mark.asyncio
 async def test_index_repo_empty_readme(fake_embedder):
     with patch("indexer.fetch_readme", new_callable=AsyncMock, return_value=""):
-        index = VectorIndex()
+        vector_index = VectorIndex(embedding_fn=fake_embedder.generate_embeddings)
+        bm25 = BM25Index()
+        retriever = HybridRetriever(vector_index, bm25)
         count = await index_repo(
             mcp_client=MagicMock(spec=MCPClient),
-            index=index,
+            hybrid_retriever=retriever,
             owner="org",
             repo="repo",
         )
         assert count == 0
-        assert len(index) == 0
+        assert len(retriever) == 0
 
 
 @pytest.mark.asyncio
@@ -79,15 +82,17 @@ async def test_index_repo_empty_readme(fake_embedder):
 )
 async def test_index_repo_chunk_counts(fake_embedder, readme, expected_chunks):
     with patch("indexer.fetch_readme", new_callable=AsyncMock, return_value=readme):
-        index = VectorIndex(embedding_fn=fake_embedder.generate_embeddings)
+        vector_index = VectorIndex(embedding_fn=fake_embedder.generate_embeddings)
+        bm25_index = BM25Index()
+        retriever = HybridRetriever(vector_index, bm25_index)
         count = await index_repo(
             mcp_client=MagicMock(spec=MCPClient),
-            index=index,
+            hybrid_retriever=retriever,
             owner="org",
             repo="repo",
         )
         assert count == expected_chunks
-        assert len(index) == expected_chunks
+        assert len(retriever) == expected_chunks
 
 
 @pytest.mark.asyncio
@@ -97,11 +102,13 @@ async def test_index_repo_propagates_fetch_error(fake_embedder):
         new_callable=AsyncMock,
         side_effect=ValueError("No README context found"),
     ):
-        index = VectorIndex()
+        vector_index = VectorIndex(embedding_fn=fake_embedder.generate_embeddings)
+        bm25 = BM25Index()
+        retriever = HybridRetriever(vector_index, bm25)
         with pytest.raises(ValueError, match="No README context found"):
             await index_repo(
                 mcp_client=MagicMock(spec=MCPClient),
-                index=index,
+                hybrid_retriever=retriever,
                 owner="org",
                 repo="repo",
             )

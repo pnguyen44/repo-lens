@@ -112,12 +112,12 @@ class BM25Index:
         return score
 
     def search(
-        self, query_text: str, k: int = 1, score_normalization_factor: float = 0.1
+        self, query: str, k: int = 1, score_normalization_factor: float = 0.1
     ) -> list[tuple[dict[str, Any], float]]:
         if not self.documents:
             return []
 
-        if not isinstance(query_text, str):
+        if not isinstance(query, str):
             raise TypeError("Query text must be a string.")
 
         if k <= 0:
@@ -131,7 +131,7 @@ class BM25Index:
             return []
 
         # Tokenize the query
-        query_tokens = self._tokenizer(query_text)
+        query_tokens = self._tokenizer(query)
 
         if not query_tokens:
             return []
@@ -153,3 +153,6 @@ class BM25Index:
 
         normalized_results.sort(key=lambda item: item[1])
         return normalized_results
+
+    def __len__(self) -> int:
+        return len(self.documents)

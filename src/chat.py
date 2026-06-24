@@ -3,11 +3,11 @@ import logging
 from typing import Any, Optional
 
 from chat_client import ChatClient
-from embeddings import Embedder, InputType
+from embeddings import Embedder
+from hybrid_retriever import HybridRetriever
 from mcp_client import MCPClient
 from tool_manager import ToolManager
 from anthropic import BadRequestError, RateLimitError
-from vector_index import VectorIndex
 from reranker import Reranker
 
 logger = logging.getLogger(__name__)
@@ -25,7 +25,7 @@ class Chat:
         mcp_clients: dict[str, MCPClient],
         system_prompt: str | None = None,
         embedder: Optional[Embedder] = None,
-        index: Optional[VectorIndex] = None,
+        hybrid_retriever: Optional[HybridRetriever] = None,
         web_search: bool = True,
         reranker: Optional[Reranker] = None,
     ) -> None:
@@ -35,20 +35,17 @@ class Chat:
         self.tools: list[Any] = []
         self.messages: list[Any] = []
         self.embedder = embedder
-        self.index = index
+        self.hybrid_retriever = hybrid_retriever
         self.web_search = web_search
         self.reranker = reranker
 
     def _build_context(self, query: str) -> str | list[Any]:
-        if not self.embedder or not self.index:
+        if not self.hybrid_retriever:
             return ""
 
         try:
-            query_vector = self.embedder.generate_embeddings(
-                [query], input_type=InputType.QUERY
-            )[0]
-            results = self.index.search(
-                query=query_vector, k=15 if self.reranker else 3
+            results = self.hybrid_retriever.search(
+                query_text=query, k=15 if self.reranker else 3
             )
 
             if self.reranker:
