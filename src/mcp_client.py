@@ -1,3 +1,4 @@
+import logging
 from types import TracebackType
 from typing import Self
 
@@ -5,6 +6,8 @@ from mcp import ClientSession, StdioServerParameters, types
 from contextlib import AsyncExitStack
 
 from mcp.client.stdio import stdio_client
+
+logger = logging.getLogger(__name__)
 
 
 class MCPClient:
@@ -57,7 +60,11 @@ class MCPClient:
         return self
 
     async def cleanup(self) -> None:
-        await self._exit_stack.aclose()
+        try:
+            await self._exit_stack.aclose()
+        except Exception as e:
+            logger.debug("MCP cleanup error (expected on exit): %s", e)
+
         self._session = None
 
     async def __aexit__(
