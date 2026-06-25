@@ -1,5 +1,13 @@
 from abc import ABC, abstractmethod
-from typing import Any, Generic, TypedDict, TypeVar, Unpack
+from typing import Any, Generic, Iterator, Protocol, Self, TypedDict, TypeVar, Unpack
+
+
+class MessageStream(Protocol):
+    def __enter__(self) -> Self: ...
+    def __exit__(self, *args: Any) -> None: ...
+    def __iter__(self) -> Iterator[Any]: ...
+    def __next__(self) -> Any: ...
+    def get_final_message(self) -> Any: ...
 
 
 class ChatParams(TypedDict, total=False):
@@ -7,7 +15,7 @@ class ChatParams(TypedDict, total=False):
     max_tokens: int
     temperature: float
     tools: list[Any] | None
-    tool_choice: dict[str, str] | str | None
+    tool_choice: dict[str, Any] | str | None
     betas: list[Any] | None
     stop_sequences: list[str] | None
     thinking: bool | None
@@ -48,9 +56,18 @@ class ChatClient(ABC, Generic[T, R]):
         pass
 
     @abstractmethod
-    def chat_stream(self, messages: list[Any], **kwargs: Unpack[ChatParams]) -> R:
+    def chat_stream(
+        self, messages: list[Any], **kwargs: Unpack[ChatParams]
+    ) -> MessageStream:
         pass
 
     @abstractmethod
     def text_from_message(self, message: Any) -> str:
         pass
+
+    @abstractmethod
+    def record_usage(self, usage: Any) -> None:
+        pass
+
+    def extract_citation_titles(self, message: Any) -> set[str]:
+        return set()

@@ -4,7 +4,7 @@ from typing import Any, Unpack
 from anthropic import Anthropic
 from anthropic.types import Message, Usage
 
-from chat_client import ChatClient, ChatParams
+from chat_client import ChatClient, ChatParams, MessageStream
 from token_tracker import TokenTracker
 
 logger = logging.getLogger(__name__)
@@ -29,7 +29,7 @@ class Claude(ChatClient[Anthropic, Message]):
             "citations": {"enabled": True},
         }
 
-    def _extract_citation_titles(self, message: Message) -> set[str]:
+    def extract_citation_titles(self, message: Message) -> set[str]:
         titles: set[str] = set()
         for block in message.content:
             if block.type == "text" and block.citations:
@@ -46,7 +46,7 @@ class Claude(ChatClient[Anthropic, Message]):
                 parts.append(block.text)
 
         text = "\n".join(parts)
-        titles = self._extract_citation_titles(message)
+        titles = self.extract_citation_titles(message)
         if titles:
             text += "\n" + " ".join(f"[{t}]" for t in titles)
         return text
@@ -109,7 +109,7 @@ class Claude(ChatClient[Anthropic, Message]):
 
         return params
 
-    def _record_usage(self, usage: Usage) -> None:
+    def record_usage(self, usage: Usage) -> None:
         self.token_tracker.record(usage)
         logger.info(
             "Tokens: in=%d out=%d cache_read=%d",
@@ -123,28 +123,12 @@ class Claude(ChatClient[Anthropic, Message]):
 
         response = self.client.messages.create(**params)
 
-        self._record_usage(response.usage)
+        self.record_usage(response.usage)
 
         return response
 
-    def chat_stream(self, messages: list[Any], **kwargs: Unpack[ChatParams]) -> Message:
+    def chat_stream(
+        self, messages: list[Any], **kwargs: Unpack[ChatParams]
+    ) -> MessageStream:
         params = self._build_params(messages=messages, **kwargs)
-
-        with self.client.messages.stream(**params) as stream:
-            for text in stream.text_stream:
-                print(text, end="", flush=True)
-            print()
-
-        final_message = stream.get_final_message()
-
-        self._record_usage(final_message.usage)
-
-        if any(b.type == "web_search_tool_result" for b in final_message.content):
-            logger.info("Web search tool called")
-
-        titles = self._extract_citation_titles(final_message)
-
-        if titles:
-            print("Sources: " + ", ".join(titles))
-
-        return final_message
+        return self.client.messages.stream(**params)  # type: ignore[no-any-return]

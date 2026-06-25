@@ -1,19 +1,41 @@
 from typing import Any, Unpack
 
-from chat_client import ChatClient, ChatParams
+from chat_client import ChatClient, ChatParams, MessageStream
 
 model = "test-model"
+
+
+class FakeStream:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        pass
+
+    def __iter__(self):
+        return iter([])
+
+    def __next__(self):
+        raise StopIteration
+
+    def get_final_message(self):
+        return "fake message"
 
 
 class FakeChatClient(ChatClient[None, str]):
     def chat(self, messages: list[Any], **kwargs: Unpack[ChatParams]) -> str:
         return "fake response"
 
-    def chat_stream(self, messages: list[Any], **kwargs: Unpack[ChatParams]) -> str:
-        return "fake streamed response"
+    def chat_stream(
+        self, messages: list[Any], **kwargs: Unpack[ChatParams]
+    ) -> MessageStream:
+        return FakeStream()
 
     def text_from_message(self, message: Any) -> str:
         return str(message)
+
+    def record_usage(self, usage: Any) -> None:
+        pass
 
 
 def test_add_user_message() -> None:

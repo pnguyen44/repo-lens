@@ -2,6 +2,7 @@ import asyncio
 import logging
 from typing import Any, Optional
 
+
 from chat_client import ChatClient
 from embeddings import Embedder
 from hybrid_retriever import HybridRetriever
@@ -76,7 +77,7 @@ class Chat:
             logger.warning("context retrieval failed, proceeding without RAG")
             return ""
 
-    async def run(self, query: str) -> str:
+    async def run(self, query: str, tool_choice: dict[str, Any] | None = None) -> str:
         final_text_response = ""
 
         if not self.tools:
@@ -88,20 +89,53 @@ class Chat:
         retries = 0
         while True:
             try:
-                response = self.chat_client.chat_stream(
+                with self.chat_client.chat_stream(
                     messages=self.messages,
                     tools=self.tools,
                     system=self.system_prompt,
                     web_search=self.web_search,
-                )
+                    tool_choice=tool_choice,
+                ) as stream:
+                    current_block_type = None
+                    for chunk in stream:
+                        if chunk.type == "text":
+                            print(chunk.text, end="")
+                            final_text_response += chunk.text
 
-                self.chat_client.add_assistant_message(self.messages, response)
+                        if chunk.type == "content_block_start":
+                            current_block_type = chunk.content_block.type
+                            if chunk.content_block.type == "tool_use":
+                                print(f'\n>>> Tool Call: "{chunk.content_block.name}"')
 
-                if response.stop_reason == "tool_use":
+                        if chunk.type == "input_json" and chunk.partial_json:
+                            print(chunk.partial_json, end="")
+
+                        if chunk.type == "content_block_stop":
+                            if current_block_type == "tool_use":
+                                print()
+
+                    response = stream.get_final_message()
+                    self.chat_client.record_usage(response.usage)
+
+                    if any(
+                        b.type == "web_search_tool_result" for b in response.content
+                    ):
+                        logger.info("Web search tool called")
+
+                    titles = self.chat_client.extract_citation_titles(response)
+                    if titles:
+                        print("\nSources: " + ", ".join(titles))
+
+                    self.chat_client.add_assistant_message(self.messages, response)
+
+                    if response.stop_reason != "tool_use":
+                        break
+
                     tool_names = [
                         b.name for b in response.content if b.type == "tool_use"
                     ]
                     logger.info("Tool call: %s", tool_names)
+
                     tool_result_parts = await ToolManager.execute_tool_requests(
                         clients=self.mcp_clients, message=response
                     )
@@ -110,9 +144,11 @@ class Chat:
                         messages=self.messages,
                         content=tool_result_parts,
                     )
-                else:
-                    final_text_response = self.chat_client.text_from_message(response)
-                    break
+
+                    if tool_choice:
+                        tool_choice = None
+                        continue
+
             except BadRequestError as e:
                 if "prompt is too long" in str(e):
                     logger.warning("Conversation is too long. Starting fresh.")
