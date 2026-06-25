@@ -48,7 +48,7 @@ CONTEXT_CASES = [
         "expected_not_in": [],
     },
     {
-        "name": "excludes irrelevant chunks",
+        "name": "wraps single chunk in document block",
         "vectors": [
             (
                 [0.0, 1.0, 0.0],
@@ -60,11 +60,11 @@ CONTEXT_CASES = [
                 },
             )
         ],
-        "expected_in": [],
-        "expected_not_in": ["bad"],
+        "expected_in": ["bad", "<source"],
+        "expected_not_in": [],
     },
     {
-        "name": "filters mixed relevance",
+        "name": "wraps multiple chunks in document blocks",
         "vectors": [
             (
                 [1.0, 0.0, 0.0],
@@ -85,8 +85,8 @@ CONTEXT_CASES = [
                 },
             ),
         ],
-        "expected_in": ["good", "<source"],
-        "expected_not_in": ["bad"],
+        "expected_in": ["good", "bad", "<source"],
+        "expected_not_in": [],
     },
 ]
 

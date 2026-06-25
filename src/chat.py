@@ -12,9 +12,6 @@ from reranker import Reranker
 
 logger = logging.getLogger(__name__)
 
-# Cosine distance (1 − similarity): 0.0 = identical, 2.0 = opposite.
-# Chunks with distance <= this value are included as context in _build_context.
-DISTANCE_THRESHOLD = 0.6
 MAX_RETRIES = 3
 
 
@@ -61,9 +58,7 @@ class Chat:
                         )
 
             else:
-                chunks = [
-                    chunk for chunk, dist in results if dist <= DISTANCE_THRESHOLD
-                ]
+                chunks = [chunk for chunk, dist in results]
 
             sources = [
                 self.chat_client.build_document_block(
