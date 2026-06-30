@@ -10,6 +10,12 @@ install:
 test:
 	uv run pytest -v
 
+e2e:
+	uv run pytest e2e/ -v
+
+test-all:
+	uv run pytest tests/ e2e/ -v
+
 lint:
 	pre-commit run --all-files
 

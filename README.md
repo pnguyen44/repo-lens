@@ -11,6 +11,7 @@ AI-powered CLI for chatting about GitHub repositories. Uses RAG (Retrieval-Augme
 - [RAG Pipeline](#rag-pipeline)
 - [RAG Evaluation](#rag-evaluation)
 - [Prompt Eval Tool](#prompt-eval-tool)
+- [Testing](#testing)
 - [Pre-commit Setup](#pre-commit-setup)
 
 ## Prerequisites
@@ -71,6 +72,26 @@ Evaluate how well a prompt performs by auto-generating test cases and scoring re
 
 ```bash
 make eval PROMPT="Review the following code. Identify bugs and suggest improvements."
+```
+
+## Testing
+
+Run unit tests:
+
+```bash
+make test
+```
+
+Run end-to-end tests (requires API keys configured in `.env`):
+
+```bash
+make e2e
+```
+
+Run all tests:
+
+```bash
+make test-all
 ```
 
 ## Pre-commit Setup
