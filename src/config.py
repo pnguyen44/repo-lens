@@ -23,8 +23,10 @@ def create_config() -> Config:
     voyage_embed_model = os.environ.get("VOYAGE_EMBED_MODEL", "voyage-3-large")
     voyage_rerank_model = os.environ.get("VOYAGE_RERANK_MODEL", "rerank-2")
 
-    if not os.environ.get("ANTHROPIC_API_KEY", ""):
+    if provider == "anthropic" and not os.environ.get("ANTHROPIC_API_KEY", ""):
         raise ValueError("ANTHROPIC_API_KEY is missing a value. Update .env")
+    if provider == "gemini" and not os.environ.get("GEMINI_API_KEY", ""):
+        raise ValueError("GEMINI_API_KEY is missing a value. Update .env")
     if not model:
         raise ValueError("MODEL is missing a value. Update .env")
     if not github_token:

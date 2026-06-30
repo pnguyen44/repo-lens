@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import Any, Generic, Iterator, Protocol, Self, TypedDict, TypeVar, Unpack
 
+from token_tracker import TokenTracker
+
 
 class MessageStream(Protocol):
     def __enter__(self) -> Self: ...
@@ -33,6 +35,7 @@ class ChatClient(ABC, Generic[T, R]):
     def __init__(self, client: T, model: str) -> None:
         self.client = client
         self.model = model
+        self.token_tracker = TokenTracker()
 
     def add_user_message(self, messages: list[Any], content: str | list[Any]) -> None:
         messages.append({"role": "user", "content": content})

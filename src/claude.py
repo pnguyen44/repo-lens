@@ -5,7 +5,6 @@ from anthropic import Anthropic
 from anthropic.types import Message, Usage
 
 from chat_client import ChatClient, ChatParams, MessageStream
-from token_tracker import TokenTracker
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +14,6 @@ WEB_SEARCH_MAX_USES = 5
 class Claude(ChatClient[Anthropic, Message]):
     def __init__(self, client: Anthropic, model: str) -> None:
         super().__init__(client, model)
-        self.token_tracker = TokenTracker()
 
     def build_document_block(self, content: str, title: str) -> dict[str, Any]:
         return {

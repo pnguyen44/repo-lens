@@ -11,4 +11,4 @@ RUN pip install .
 
 WORKDIR /app/src
 
-CMD ["python", "-u", "main.py"]
+CMD ["python", "-u", "chat_cli.py"]

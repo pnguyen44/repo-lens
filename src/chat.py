@@ -8,7 +8,7 @@ from embeddings import Embedder
 from hybrid_retriever import HybridRetriever
 from mcp_client import MCPClient
 from tool_manager import ToolManager
-from anthropic import BadRequestError, RateLimitError
+from anthropic import AuthenticationError, BadRequestError, RateLimitError
 from reranker import Reranker
 
 logger = logging.getLogger(__name__)
@@ -150,11 +150,17 @@ class Chat:
                         continue
 
             except BadRequestError as e:
+                if "credit balance is too low" in str(e):
+                    print("\nOut of API credits. Switch provider or add credits.")
+                    break
                 if "prompt is too long" in str(e):
                     logger.warning("Conversation is too long. Starting fresh.")
                     self.messages.clear()
                     break
                 raise
+            except AuthenticationError:
+                print("\nInvalid API key. Check your .env file.")
+                break
             except RateLimitError:
                 if retries >= MAX_RETRIES:
                     logger.error("Rate limited after %d retries. Skipping.", retries)

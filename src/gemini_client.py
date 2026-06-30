@@ -1,7 +1,6 @@
 import logging
 from typing import Any, Unpack
 from chat_client import ChatClient, ChatParams, MessageStream
-from token_tracker import TokenTracker
 
 logger = logging.getLogger(__name__)
 
@@ -9,7 +8,6 @@ logger = logging.getLogger(__name__)
 class Gemini(ChatClient[Any, Any]):
     def __init__(self, client: Any, model: str) -> None:
         super().__init__(client, model)
-        self.token_tracker = TokenTracker()
 
     def build_document_block(self, content: str, title: str) -> dict[str, Any]:
         return {

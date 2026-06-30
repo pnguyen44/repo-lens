@@ -2,8 +2,6 @@ import logging
 import os
 from contextlib import AsyncExitStack
 from config import create_config
-from claude import Claude
-from anthropic import Anthropic
 from rich import print
 from indexer import index_repo
 from mcp_client import MCPClient, create_github_client
@@ -15,6 +13,7 @@ from reranker import VoyageReranker
 from vector_index import VectorIndex
 from bm25_index import BM25Index
 from hybrid_retriever import HybridRetriever
+from provider import create_chat_client
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO").upper(),
@@ -92,7 +91,6 @@ async def prompt_and_index(
 
 async def main() -> None:
     config = create_config()
-    client = Anthropic()
 
     async with AsyncExitStack() as stack:
         github_mcp = await stack.enter_async_context(
@@ -101,7 +99,7 @@ async def main() -> None:
 
         owner = config.default_org or input("> GITHUB org: ")
 
-        claude = Claude(client=client, model=config.model)
+        client = create_chat_client(config=config)
 
         embedder = VoyageEmbedder(VoyageClient(), model=config.voyage_embed_model)
         vector_index = VectorIndex(
@@ -116,14 +114,16 @@ async def main() -> None:
             github_mcp=github_mcp, retriever=retriever, owner=owner
         )
 
-        print(f"Chatting about {owner}/{repo}")
+        print(
+            f"Chatting about {owner}/{repo} (provider: {config.provider}, model: {config.model})"
+        )
 
         reranker = VoyageReranker(
             client=VoyageClient(), model=config.voyage_rerank_model
         )
 
         chat = Chat(
-            chat_client=claude,
+            chat_client=client,
             mcp_clients={"github": github_mcp},
             system_prompt=build_system_prompt(config.default_org),
             embedder=embedder,
@@ -140,7 +140,7 @@ async def main() -> None:
         except KeyboardInterrupt:
             print("\nexiting")
         finally:
-            print(claude.token_tracker.summary())
+            print(client.token_tracker.summary())
 
 
 if __name__ == "__main__":
