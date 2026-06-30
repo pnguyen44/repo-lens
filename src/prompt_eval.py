@@ -126,7 +126,7 @@ def main() -> None:
 
     config = create_config()
     client = Anthropic()
-    claude = Claude(client=client, model=config.claude_model)
+    claude = Claude(client=client, model=config.model)
 
     evaluator = PromptEvaluator(claude)
 

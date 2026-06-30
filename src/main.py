@@ -101,7 +101,7 @@ async def main() -> None:
 
         owner = config.default_org or input("> GITHUB org: ")
 
-        claude = Claude(client=client, model=config.claude_model)
+        claude = Claude(client=client, model=config.model)
 
         embedder = VoyageEmbedder(VoyageClient(), model=config.voyage_embed_model)
         vector_index = VectorIndex(

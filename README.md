@@ -41,7 +41,7 @@ cp .env.example .env
 Then edit `.env` with your values:
 
 - `ANTHROPIC_API_KEY` — Claude API key
-- `CLAUDE_MODEL` — model to use (e.g. `claude-sonnet-4-20250514`)
+- `MODEL` — model to use (e.g. `claude-haiku-4-5`, `gemini-3.5-flash`)
 - `GITHUB_TOKEN` — GitHub personal access token
 - `DEFAULT_ORG` — default GitHub org for repo lookups
 - `VOYAGE_API_KEY` — VoyageAI API key for embeddings
