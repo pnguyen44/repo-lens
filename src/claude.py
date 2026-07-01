@@ -1,14 +1,76 @@
 import logging
-from typing import Any, Unpack
+from typing import Any, Iterator, Unpack
 
 from anthropic import Anthropic
 from anthropic.types import Message, Usage
 
-from chat_client import ChatClient, ChatParams, MessageStream
+from chat_client import (
+    ChatClient,
+    ChatParams,
+    MessageStream,
+    StreamChunk,
+    StreamResponse,
+)
 
 logger = logging.getLogger(__name__)
 
 WEB_SEARCH_MAX_USES = 5
+
+
+class ClaudeStream:
+    def __init__(self, manager: Any) -> None:
+        self._manager = manager
+        self._message_stream: Any = None
+        self._response: Any = None
+        self._text_parts: list[str] = []
+        self._in_tool_block = False
+
+    def __enter__(self) -> "ClaudeStream":
+        self._message_stream = self._manager.__enter__()
+        return self
+
+    def __exit__(self, *args: Any) -> None:
+        self._manager.__exit__(*args)
+
+    def __iter__(self) -> Iterator[StreamChunk]:
+        return self
+
+    def __next__(self) -> StreamChunk:
+        while True:
+            chunk = next(self._message_stream)
+
+            if chunk.type == "text":
+                self._text_parts.append(chunk.text)
+                return StreamChunk(type="text", text=chunk.text)
+
+            if chunk.type == "content_block_start":
+                if chunk.content_block.type == "tool_use":
+                    self._in_tool_block = True
+                    return StreamChunk(
+                        type="tool_start", tool_name=chunk.content_block.name
+                    )
+
+            if chunk.type == "input_json" and chunk.partial_json:
+                return StreamChunk(type="tool_input", partial_json=chunk.partial_json)
+
+            if chunk.type == "content_block_stop" and self._in_tool_block:
+                self._in_tool_block = False
+                return StreamChunk(type="tool_stop")
+
+    def get_final_message(self) -> StreamResponse:
+        message = self._message_stream.get_final_message()
+        self._response = message
+
+        stop_reason = message.stop_reason or "end_turn"
+        tool_calls = [b for b in message.content if b.type == "tool_use"]
+
+        return StreamResponse(
+            text="".join(self._text_parts),
+            stop_reason=stop_reason,
+            tool_calls=tool_calls,
+            usage=message.usage,
+            raw=message,
+        )
 
 
 class Claude(ChatClient[Anthropic, Message]):
@@ -26,6 +88,11 @@ class Claude(ChatClient[Anthropic, Message]):
             "title": title,
             "citations": {"enabled": True},
         }
+
+    def has_web_search_results(self, raw: Any) -> bool:
+        if not raw:
+            return False
+        return any(b.type == "web_search_tool_result" for b in raw.content)
 
     def extract_citation_titles(self, message: Message) -> set[str]:
         titles: set[str] = set()
@@ -129,4 +196,5 @@ class Claude(ChatClient[Anthropic, Message]):
         self, messages: list[Any], **kwargs: Unpack[ChatParams]
     ) -> MessageStream:
         params = self._build_params(messages=messages, **kwargs)
-        return self.client.messages.stream(**params)  # type: ignore[no-any-return]
+        stream = self.client.messages.stream(**params)
+        return ClaudeStream(stream)

@@ -1,15 +1,33 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from typing import Any, Generic, Iterator, Protocol, Self, TypedDict, TypeVar, Unpack
 
 from token_tracker import TokenTracker
 
 
+@dataclass
+class StreamChunk:
+    type: str
+    text: str = ""
+    tool_name: str = ""
+    partial_json: str = ""
+
+
+@dataclass
+class StreamResponse:
+    text: str = ""
+    stop_reason: str = ""
+    tool_calls: list[Any] = field(default_factory=list)
+    usage: Any = None
+    raw: Any = None
+
+
 class MessageStream(Protocol):
     def __enter__(self) -> Self: ...
     def __exit__(self, *args: Any) -> None: ...
-    def __iter__(self) -> Iterator[Any]: ...
-    def __next__(self) -> Any: ...
-    def get_final_message(self) -> Any: ...
+    def __iter__(self) -> Iterator[StreamChunk]: ...
+    def __next__(self) -> StreamChunk: ...
+    def get_final_message(self) -> StreamResponse: ...
 
 
 class ChatParams(TypedDict, total=False):
@@ -74,3 +92,6 @@ class ChatClient(ABC, Generic[T, R]):
 
     def extract_citation_titles(self, message: Any) -> set[str]:
         return set()
+
+    def has_web_search_results(self, raw: Any) -> bool:
+        return False

@@ -8,7 +8,7 @@ def create_chat_client(config: Config) -> ChatClient[Any, Any]:
 
     if config.provider == "gemini":
         from google import genai
-        from gemini_client import Gemini
+        from gemini import Gemini
 
         client = genai.Client()
         return Gemini(client=client, model=model)

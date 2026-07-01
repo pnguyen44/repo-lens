@@ -3,7 +3,7 @@ from typing import Any
 import pytest
 from dotenv import load_dotenv
 from google import genai
-from gemini_client import Gemini
+from gemini import Gemini
 
 load_dotenv()
 

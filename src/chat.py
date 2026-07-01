@@ -96,48 +96,43 @@ class Chat:
                     web_search=self.web_search,
                     tool_choice=tool_choice,
                 ) as stream:
-                    current_block_type = None
                     for chunk in stream:
                         if chunk.type == "text":
                             print(chunk.text, end="")
                             final_text_response += chunk.text
-
-                        if chunk.type == "content_block_start":
-                            current_block_type = chunk.content_block.type
-                            if chunk.content_block.type == "tool_use":
-                                print(f'\n>>> Tool Call: "{chunk.content_block.name}"')
-
-                        if chunk.type == "input_json" and chunk.partial_json:
+                        elif chunk.type == "tool_start":
+                            print(f'\n>>> Tool Call: "{chunk.tool_name}"')
+                        elif chunk.type == "tool_input":
                             print(chunk.partial_json, end="")
-
-                        if chunk.type == "content_block_stop":
-                            if current_block_type == "tool_use":
-                                print()
+                        elif chunk.type == "tool_stop":
+                            print()
 
                     response = stream.get_final_message()
-                    self.chat_client.record_usage(response.usage)
 
-                    if any(
-                        b.type == "web_search_tool_result" for b in response.content
-                    ):
+                    if response.usage:
+                        self.chat_client.record_usage(response.usage)
+
+                    if not response.raw:
+                        logger.warning("No response received from provider")
+                        break
+
+                    if self.chat_client.has_web_search_results(response.raw):
                         logger.info("Web search tool called")
 
-                    titles = self.chat_client.extract_citation_titles(response)
+                    titles = self.chat_client.extract_citation_titles(response.raw)
                     if titles:
                         print("\nSources: " + ", ".join(titles))
 
-                    self.chat_client.add_assistant_message(self.messages, response)
+                    self.chat_client.add_assistant_message(self.messages, response.raw)
 
                     if response.stop_reason != "tool_use":
                         break
 
-                    tool_names = [
-                        b.name for b in response.content if b.type == "tool_use"
-                    ]
+                    tool_names = [b.name for b in response.tool_calls]
                     logger.info("Tool call: %s", tool_names)
 
                     tool_result_parts = await ToolManager.execute_tool_requests(
-                        clients=self.mcp_clients, message=response
+                        clients=self.mcp_clients, message=response.raw
                     )
 
                     self.chat_client.add_user_message(
