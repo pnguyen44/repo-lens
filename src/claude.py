@@ -11,6 +11,7 @@ from chat_client import (
     StreamChunk,
     StreamResponse,
 )
+from token_tracker import UsagePayload
 
 logger = logging.getLogger(__name__)
 
@@ -175,12 +176,24 @@ class Claude(ChatClient[Anthropic, Message]):
         return params
 
     def record_usage(self, usage: Usage) -> None:
-        self.token_tracker.record(usage)
+        input_tokens = usage.input_tokens
+        output_tokens = usage.output_tokens
+        cache_read = usage.cache_read_input_tokens or 0
+        cache_creation = usage.cache_creation_input_tokens or 0
+
+        usage_payload: UsagePayload = {
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "cache_read_input_tokens": cache_read,
+            "cache_creation_input_tokens": cache_creation,
+        }
+
+        self.token_tracker.record(usage_payload)
         logger.info(
             "Tokens: in=%d out=%d cache_read=%d",
-            usage.input_tokens,
-            usage.output_tokens,
-            usage.cache_read_input_tokens or 0,
+            input_tokens,
+            output_tokens,
+            cache_read,
         )
 
     def chat(self, messages: list[Any], **kwargs: Unpack[ChatParams]) -> Message:

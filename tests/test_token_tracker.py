@@ -1,31 +1,27 @@
-from anthropic.types import Usage
-
 from token_tracker import TokenTracker
 
 
 def test_record_once_no_cache() -> None:
     tracker = TokenTracker()
-    tracker.record(Usage(input_tokens=100, output_tokens=50))
+    tracker.record({"input_tokens": 100, "output_tokens": 50})
 
     assert tracker.summary() == {
         "input_tokens": 100,
         "output_tokens": 50,
-        "cache_read_input_tokens": 0,
-        "cache_creation_input_tokens": 0,
         "request_count": 1,
     }
 
 
 def test_record_accumulates() -> None:
     tracker = TokenTracker()
-    tracker.record(Usage(input_tokens=100, output_tokens=50))
+    tracker.record({"input_tokens": 100, "output_tokens": 50})
     tracker.record(
-        Usage(
-            input_tokens=100,
-            output_tokens=50,
-            cache_read_input_tokens=10,
-            cache_creation_input_tokens=10,
-        )
+        {
+            "input_tokens": 100,
+            "output_tokens": 50,
+            "cache_read_input_tokens": 10,
+            "cache_creation_input_tokens": 10,
+        }
     )
 
     assert tracker.summary() == {
@@ -40,12 +36,12 @@ def test_record_accumulates() -> None:
 def test_record_with_all_cache_fields() -> None:
     tracker = TokenTracker()
     tracker.record(
-        Usage(
-            input_tokens=50,
-            output_tokens=25,
-            cache_read_input_tokens=30,
-            cache_creation_input_tokens=20,
-        )
+        {
+            "input_tokens": 50,
+            "output_tokens": 25,
+            "cache_read_input_tokens": 30,
+            "cache_creation_input_tokens": 20,
+        }
     )
 
     assert tracker.summary() == {

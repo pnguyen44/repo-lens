@@ -113,7 +113,10 @@ class Chat:
                         self.chat_client.record_usage(response.usage)
 
                     if not response.raw:
-                        logger.warning("No response received from provider")
+                        logger.warning(
+                            "Stream completed but no raw response available (stop_reason=%s)",
+                            response.stop_reason,
+                        )
                         break
 
                     if self.chat_client.has_web_search_results(response.raw):
@@ -128,7 +131,12 @@ class Chat:
                     if response.stop_reason != "tool_use":
                         break
 
-                    tool_names = [b.name for b in response.tool_calls]
+                    tool_names = [
+                        b.get("name")
+                        if isinstance(b, dict)
+                        else getattr(b, "name", None)
+                        for b in response.tool_calls
+                    ]
                     logger.info("Tool call: %s", tool_names)
 
                     tool_result_parts = await ToolManager.execute_tool_requests(
