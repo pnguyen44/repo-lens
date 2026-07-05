@@ -1,3 +1,5 @@
+.PHONY: build run install test e2e test-all lint prompt-eval rag-eval
+
 build:
 	docker build -t repo-lens .
 
@@ -19,7 +21,7 @@ test-all:
 lint:
 	pre-commit run --all-files
 
-eval:
+prompt-eval:
 	uv run src/prompt_eval.py "$(PROMPT)"
 
 rag-eval:

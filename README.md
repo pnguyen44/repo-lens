@@ -71,7 +71,7 @@ make rag-eval
 Evaluate how well a prompt performs by auto-generating test cases and scoring responses with LLM-as-judge.
 
 ```bash
-make eval PROMPT="Review the following code. Identify bugs and suggest improvements."
+make prompt-eval PROMPT="Review the following code. Identify bugs and suggest improvements."
 ```
 
 ## Testing
