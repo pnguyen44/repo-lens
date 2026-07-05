@@ -20,10 +20,9 @@ def test_basic_response(gemini: Gemini) -> None:
     messages: list[Any] = []
     gemini.add_user_message(messages, "Reply with exactly the word 'hello'")
     response = gemini.chat(messages, system="You are a helpful assistant.")
-    text = gemini.text_from_message(response)
 
-    assert text is not None
-    assert len(text) > 0
+    assert response.text is not None
+    assert len(response.text) > 0
 
 
 def test_multi_turn(gemini: Gemini) -> None:
@@ -34,6 +33,5 @@ def test_multi_turn(gemini: Gemini) -> None:
     gemini.add_assistant_message(messages, response)
     gemini.add_user_message(messages, "What number did I just tell you?")
     response2 = gemini.chat(messages, system="You are a helpful assistant.")
-    text = gemini.text_from_message(response2)
 
-    assert "42" in text
+    assert "42" in response2.text

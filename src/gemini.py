@@ -1,6 +1,8 @@
 import logging
 from typing import Any, Unpack, Iterator
 
+from google.genai import Client as GenaiClient
+
 from chat_client import (
     ChatClient,
     ChatParams,
@@ -10,7 +12,18 @@ from chat_client import (
 )
 from token_tracker import UsagePayload
 
+
 logger = logging.getLogger(__name__)
+
+
+def _extract_usage(response: Any) -> UsagePayload | None:
+    if not getattr(response, "usage", None):
+        return None
+
+    return {
+        "input_tokens": response.usage.total_input_tokens,
+        "output_tokens": response.usage.total_output_tokens,
+    }
 
 
 class GeminiStream:
@@ -45,12 +58,7 @@ class GeminiStream:
         if not self._interaction:
             return StreamResponse(text=text)
 
-        usage: UsagePayload | None = None
-        if self._interaction.usage:
-            usage = {
-                "input_tokens": self._interaction.usage.total_input_tokens,
-                "output_tokens": self._interaction.usage.total_output_tokens,
-            }
+        usage = _extract_usage(self._interaction)
 
         return StreamResponse(
             text=text,
@@ -60,8 +68,8 @@ class GeminiStream:
         )
 
 
-class Gemini(ChatClient[Any, Any]):
-    def __init__(self, client: Any, model: str) -> None:
+class Gemini(ChatClient[GenaiClient]):
+    def __init__(self, client: GenaiClient, model: str) -> None:
         super().__init__(client, model)
 
     def build_document_block(self, content: str, title: str) -> dict[str, Any]:
@@ -80,22 +88,29 @@ class Gemini(ChatClient[Any, Any]):
             {"type": "user_input", "content": [{"type": "text", "text": text}]}
         )
 
-    def add_assistant_message(self, messages: list[Any], message: Any) -> None:
-        if hasattr(message, "steps") and message.steps:
-            for step in message.steps:
+    def add_assistant_message(
+        self, messages: list[Any], message: StreamResponse | str
+    ) -> None:
+        if isinstance(message, str):
+            messages.append(
+                {"type": "model_output", "content": [{"type": "text", "text": message}]}
+            )
+            return
+
+        raw = message.raw
+        if hasattr(raw, "steps") and raw.steps:
+            for step in raw.steps:
                 messages.append(step.model_dump())
             return
 
-        text = (
-            message.output_text
-            if hasattr(message, "output_text") and message.output_text
-            else ""
-        )
         messages.append(
-            {"type": "model_output", "content": [{"type": "text", "text": text}]}
+            {
+                "type": "model_output",
+                "content": [{"type": "text", "text": message.text}],
+            }
         )
 
-    def chat(self, messages: list[Any], **kwargs: Unpack[ChatParams]) -> Any:
+    def chat(self, messages: list[Any], **kwargs: Unpack[ChatParams]) -> StreamResponse:
         params: dict[str, Any] = {
             "model": self.model,
             "store": False,
@@ -107,14 +122,18 @@ class Gemini(ChatClient[Any, Any]):
             params["system_instruction"] = system
 
         response = self.client.interactions.create(**params)
-        if getattr(response, "usage", None):
-            self.record_usage(
-                {
-                    "input_tokens": response.usage.total_input_tokens,
-                    "output_tokens": response.usage.total_output_tokens,
-                }
-            )
-        return response
+
+        usage = _extract_usage(response)
+
+        if usage:
+            self.record_usage(usage)
+
+        return StreamResponse(
+            text=self._text_from_message(response),
+            stop_reason=getattr(response, "status", ""),
+            usage=usage,
+            raw=response,
+        )
 
     def chat_stream(
         self, messages: list[Any], **kwargs: Unpack[ChatParams]
@@ -135,10 +154,10 @@ class Gemini(ChatClient[Any, Any]):
 
         return GeminiStream(stream)
 
-    def text_from_message(self, message: Any) -> str:
+    def _text_from_message(self, message: Any) -> str:
         return message.output_text or ""
 
-    def record_usage(self, usage: Any) -> None:
+    def record_usage(self, usage: UsagePayload) -> None:
         if not usage:
             return
 

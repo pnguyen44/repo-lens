@@ -1,25 +1,24 @@
 import json
 from unittest.mock import MagicMock
+from chat_client import StreamResponse
 from prompt_eval import PromptEvaluator
 
 
 def test_generate_dataset_returns_empty_after_retries() -> None:
     mock_client = MagicMock()
-    mock_client.chat.return_value = MagicMock()
-    mock_client.text_from_message.return_value = "not valid json"
+    mock_client.chat_json.return_value = StreamResponse(text="not valid json")
 
     evaluator = PromptEvaluator(mock_client)
     result = evaluator.generate_dataset("test prompt")
 
     assert result == []
-    assert mock_client.chat.call_count == 3
+    assert mock_client.chat_json.call_count == 3
 
 
 def test_generate_dataset_parses_valid_json() -> None:
     mock_client = MagicMock()
-    mock_client.chat.return_value = MagicMock()
-    mock_client.text_from_message.return_value = json.dumps(
-        [{"input": "hello", "criteria": ["is polite"]}]
+    mock_client.chat_json.return_value = StreamResponse(
+        text=json.dumps([{"input": "hello", "criteria": ["is polite"]}])
     )
 
     evaluator = PromptEvaluator(mock_client)
@@ -31,8 +30,7 @@ def test_generate_dataset_parses_valid_json() -> None:
 
 def test_grade_output_returns_fallback_on_bad_json() -> None:
     mock_client = MagicMock()
-    mock_client.chat.return_value = MagicMock()
-    mock_client.text_from_message.return_value = "not json"
+    mock_client.chat_json.return_value = StreamResponse(text="not json")
 
     evaluator = PromptEvaluator(mock_client)
     result = evaluator.grade_output(

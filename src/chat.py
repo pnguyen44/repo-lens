@@ -19,7 +19,7 @@ MAX_RETRIES = 3
 class Chat:
     def __init__(
         self,
-        chat_client: ChatClient[Any, Any],
+        chat_client: ChatClient[Any],
         mcp_clients: dict[str, MCPClient],
         system_prompt: str | None = None,
         embedder: Optional[Embedder] = None,
@@ -126,7 +126,7 @@ class Chat:
                     if titles:
                         print("\nSources: " + ", ".join(titles))
 
-                    self.chat_client.add_assistant_message(self.messages, response.raw)
+                    self.chat_client.add_assistant_message(self.messages, response)
 
                     if response.stop_reason != "tool_use":
                         break

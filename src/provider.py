@@ -3,7 +3,7 @@ from config import Config
 from chat_client import ChatClient
 
 
-def create_chat_client(config: Config) -> ChatClient[Any, Any]:
+def create_chat_client(config: Config) -> ChatClient[Any]:
     model = config.model
 
     if config.provider == "gemini":

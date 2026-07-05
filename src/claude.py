@@ -74,7 +74,7 @@ class ClaudeStream:
         )
 
 
-class Claude(ChatClient[Anthropic, Message]):
+class Claude(ChatClient[Anthropic]):
     def __init__(self, client: Anthropic, model: str) -> None:
         super().__init__(client, model)
 
@@ -105,7 +105,7 @@ class Claude(ChatClient[Anthropic, Message]):
                         titles.add(title)
         return titles
 
-    def text_from_message(self, message: Message) -> str:
+    def _text_from_message(self, message: Message) -> str:
         parts = []
         for block in message.content:
             if block.type == "text":
@@ -196,14 +196,27 @@ class Claude(ChatClient[Anthropic, Message]):
             cache_read,
         )
 
-    def chat(self, messages: list[Any], **kwargs: Unpack[ChatParams]) -> Message:
+    def chat_json(
+        self, messages: list[Any], **kwargs: Unpack[ChatParams]
+    ) -> StreamResponse:
+        self.add_assistant_message(messages=messages, message="```json")
+        kwargs["stop_sequences"] = ["```"]
+        return self.chat(messages=messages, **kwargs)
+
+    def chat(self, messages: list[Any], **kwargs: Unpack[ChatParams]) -> StreamResponse:
         params = self._build_params(messages=messages, **kwargs)
 
         response = self.client.messages.create(**params)
 
         self.record_usage(response.usage)
 
-        return response
+        return StreamResponse(
+            text=self._text_from_message(response),
+            stop_reason=response.stop_reason or "end_turn",
+            tool_calls=[b for b in response.content if b.type == "tool_use"],
+            usage=response.usage,
+            raw=response,
+        )
 
     def chat_stream(
         self, messages: list[Any], **kwargs: Unpack[ChatParams]

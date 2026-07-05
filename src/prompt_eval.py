@@ -2,12 +2,11 @@ import json
 import logging
 import sys
 from typing import Any
-from anthropic import Anthropic
 from pydantic import TypeAdapter, ValidationError
 from chat_client import ChatClient
-from claude import Claude
 from config import create_config
 from models import GradeResult, TestCase
+from provider import create_chat_client
 from structured_output import parse_with_retry
 
 logger = logging.getLogger(__name__)
@@ -16,7 +15,7 @@ adapter = TypeAdapter(list[TestCase])
 
 
 class PromptEvaluator:
-    def __init__(self, client: ChatClient[Any, Any]) -> None:
+    def __init__(self, client: ChatClient[Any]) -> None:
         self.client = client
 
     def generate_dataset(
@@ -40,9 +39,8 @@ class PromptEvaluator:
         """
         messages: list[Any] = []
         self.client.add_user_message(messages=messages, content=dataset_prompt)
-        self.client.add_assistant_message(messages, "```json")
-        response = self.client.chat(messages, stop_sequences=["```"])
-        text = self.client.text_from_message(response)
+        response = self.client.chat_json(messages)
+        text = response.text
 
         try:
             result = adapter.validate_json(text)
@@ -66,7 +64,7 @@ class PromptEvaluator:
         messages: list[Any] = []
         self.client.add_user_message(messages=messages, content=message)
         response = self.client.chat(messages=messages)
-        return self.client.text_from_message(response)
+        return response.text
 
     def grade_output(self, test_case: dict[str, Any], output: str) -> dict[str, Any]:
         eval_prompt = f"""
@@ -80,8 +78,7 @@ class PromptEvaluator:
         """
         messages: list[Any] = []
         self.client.add_user_message(messages=messages, content=eval_prompt)
-        self.client.add_assistant_message(messages, "```json")
-        response = self.client.chat(messages=messages, stop_sequences=["```"])
+        response = self.client.chat_json(messages)
 
         try:
             return parse_with_retry(
@@ -125,10 +122,9 @@ def main() -> None:
         sys.exit(1)
 
     config = create_config()
-    client = Anthropic()
-    claude = Claude(client=client, model=config.model)
+    client = create_chat_client(config)
 
-    evaluator = PromptEvaluator(claude)
+    evaluator = PromptEvaluator(client)
 
     prompt = sys.argv[1]
     test_cases = evaluator.generate_dataset(prompt)

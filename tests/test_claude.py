@@ -16,15 +16,14 @@ def test_cannot_instantiate_chat_client_directly() -> None:
 
 def test_claude_chat_calls_api() -> None:
     mock_client = MagicMock()
-    mock_client.messages.create.return_value.content = [
-        MagicMock(text="mocked response")
-    ]
+    text_block = MagicMock(type="text", text="mocked response", citations=None)
+    mock_client.messages.create.return_value.content = [text_block]
 
     chat_client = Claude(client=mock_client, model=model)
     messages: list[Any] = [{"role": "user", "content": "hello"}]
     result = chat_client.chat(messages=messages)
 
-    assert result.content[0].text == "mocked response"
+    assert result.text == "mocked response"
 
 
 def test_chat_excludes_system_when_none() -> None:

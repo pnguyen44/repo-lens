@@ -2,13 +2,12 @@ import logging
 import textwrap
 from pathlib import Path
 from typing import Any
-from anthropic import Anthropic
 from dotenv import load_dotenv
 from chat import MAX_RETRIES
 from chat_client import ChatClient
-from claude import Claude
 from config import create_config
 from embeddings import Embedder, VoyageEmbedder, InputType
+from provider import create_chat_client
 from structured_output import parse_with_retry
 from vector_index import VectorIndex
 from chunker import chunk_by_section
@@ -28,7 +27,7 @@ class RAGEvaluator:
         index: VectorIndex,
         eval_cases: list[dict[str, Any]],
         fixture_path: Path,
-        chat_client: ChatClient[Any, Any] | None = None,
+        chat_client: ChatClient[Any] | None = None,
     ) -> None:
         self.embedder = embedder
         self.index = index
@@ -73,7 +72,7 @@ class RAGEvaluator:
         messages: list[Any] = []
         self.chat_client.add_user_message(messages=messages, content=message)
         response = self.chat_client.chat(messages=messages)
-        return self.chat_client.text_from_message(response)
+        return response.text
 
     def judge_faithfulness(
         self, context: str, question: str, answer: str
@@ -90,8 +89,7 @@ class RAGEvaluator:
 
         messages: list[Any] = []
         self.chat_client.add_user_message(messages=messages, content=eval_prompt)
-        self.chat_client.add_assistant_message(messages=messages, message="```json")
-        response = self.chat_client.chat(messages=messages, stop_sequences=["```"])
+        response = self.chat_client.chat_json(messages=messages)
 
         try:
             return parse_with_retry(
@@ -223,7 +221,7 @@ def main() -> None:
     try:
         index = VectorIndex()
         embedder = VoyageEmbedder(VoyageClient(), model=config.voyage_embed_model)
-        chat_client = Claude(client=Anthropic(), model=config.model)
+        chat_client = create_chat_client(config=config)
 
         rag_evaluator = RAGEvaluator(
             index=index,

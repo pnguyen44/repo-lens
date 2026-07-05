@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+import re
 from typing import Any, Generic, Iterator, Protocol, Self, TypedDict, TypeVar, Unpack
 
 from token_tracker import TokenTracker
@@ -44,12 +45,10 @@ class ChatParams(TypedDict, total=False):
 
 
 # T = the LLM client type (Anthropic, OpenAI, etc.)
-# R = the response type (Message, ChatCompletion, etc.)
 T = TypeVar("T")
-R = TypeVar("R")
 
 
-class ChatClient(ABC, Generic[T, R]):
+class ChatClient(ABC, Generic[T]):
     def __init__(self, client: T, model: str) -> None:
         self.client = client
         self.model = model
@@ -58,11 +57,16 @@ class ChatClient(ABC, Generic[T, R]):
     def add_user_message(self, messages: list[Any], content: str | list[Any]) -> None:
         messages.append({"role": "user", "content": content})
 
-    def add_assistant_message(self, messages: list[Any], message: R | str) -> None:
+    def add_assistant_message(
+        self, messages: list[Any], message: StreamResponse | str
+    ) -> None:
         if isinstance(message, str):
             content: Any = message
         else:
-            content = message.content  # type: ignore[attr-defined]
+            if message.raw and hasattr(message.raw, "content"):
+                content = message.raw.content
+            else:
+                content = message.text
         messages.append({"role": "assistant", "content": content})
 
     def build_document_block(self, content: str, title: str) -> dict[str, Any]:
@@ -72,18 +76,22 @@ class ChatClient(ABC, Generic[T, R]):
             "text": f'<source title="{title}">\n{content}\n</source>',
         }
 
+    def chat_json(
+        self, messages: list[Any], **kwargs: Unpack[ChatParams]
+    ) -> StreamResponse:
+        response = self.chat(messages, **kwargs)
+        response.text = re.sub(r"^```(?:json)?\s*|\s*```$", "", response.text.strip())
+
+        return response
+
     @abstractmethod
-    def chat(self, messages: list[Any], **kwargs: Unpack[ChatParams]) -> R:
+    def chat(self, messages: list[Any], **kwargs: Unpack[ChatParams]) -> StreamResponse:
         pass
 
     @abstractmethod
     def chat_stream(
         self, messages: list[Any], **kwargs: Unpack[ChatParams]
     ) -> MessageStream:
-        pass
-
-    @abstractmethod
-    def text_from_message(self, message: Any) -> str:
         pass
 
     @abstractmethod

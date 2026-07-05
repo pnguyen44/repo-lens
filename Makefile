@@ -10,7 +10,7 @@ install:
 	uv sync --extra dev
 
 test:
-	uv run pytest -v
+	uv run pytest tests/ -v
 
 e2e:
 	uv run pytest e2e/ -v
