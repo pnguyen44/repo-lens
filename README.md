@@ -56,7 +56,11 @@ make run
 
 ## RAG Pipeline
 
-Indexes repository READMEs and uses vector search to provide relevant context to Claude when answering questions. Fetches content via GitHub MCP, chunks it, embeds with VoyageAI, and stores in an in-memory vector index.
+Indexes repository READMEs and uses hybrid search (vector + BM25) to provide relevant context when answering questions. Fetches content via GitHub MCP, chunks it, embeds with VoyageAI, and stores in a vector index.
+
+```bash
+make index
+```
 
 ## RAG Evaluation
 

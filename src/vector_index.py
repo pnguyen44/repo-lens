@@ -2,7 +2,7 @@ from typing import Any, Callable, Optional
 import math
 
 from enum import Enum
-from hybrid_retriever import validate_document
+from base_vector_index import BaseVectorIndex
 
 
 class DistanceMetric(Enum):
@@ -10,16 +10,16 @@ class DistanceMetric(Enum):
     EUCLIDEAN = "euclidean"
 
 
-class VectorIndex:
+class VectorIndex(BaseVectorIndex):
     def __init__(
         self,
         distance_metric: DistanceMetric = DistanceMetric.COSINE,
         embedding_fn: Callable[[list[str]], list[list[float]]] | None = None,
     ) -> None:
+        super().__init__(embedding_fn=embedding_fn)
         self.vectors: list[list[float]] = []
         self.documents: list[dict[str, Any]] = []
         self._vector_dim: Optional[int] = None
-        self._embedding_fn = embedding_fn
 
         self._distance_functions = {
             DistanceMetric.COSINE: self._cosine_distance,
@@ -46,43 +46,14 @@ class VectorIndex:
         self.vectors.append(list(vector))
         self.documents.append(document)
 
-    def add_document(self, document: dict[str, Any]) -> None:
-        validate_document(document)
-
-        if not self._embedding_fn:
-            raise ValueError("Embedding function not provided during initialization.")
-
-        vector = self._embedding_fn([document["content"]])[0]
-
+    def _store(self, vector: list[float], document: dict[str, Any]) -> None:
         self.add_vector(vector=vector, document=document)
 
-    def add_documents(self, documents: list[dict[str, Any]]) -> None:
-        if not self._embedding_fn:
-            raise ValueError("Embedding function not provided during initialization.")
-
-        if not documents:
-            return
-
-        contents = []
-        for i, document in enumerate(documents):
-            validate_document(document=document, index=i)
-            contents.append(document["content"])
-        vectors = self._embedding_fn(contents)
-
+    def _store_batch(
+        self, vectors: list[list[float]], documents: list[dict[str, Any]]
+    ) -> None:
         for vector, document in zip(vectors, documents):
             self.add_vector(vector=vector, document=document)
-
-    def _resolve_query_vector(self, query: Any) -> list[float]:
-        if isinstance(query, str):
-            if not self._embedding_fn:
-                raise ValueError("Embedding function not provided for string query.")
-            return self._embedding_fn([query])[0]
-        elif isinstance(query, list) and all(
-            isinstance(x, (int, float)) for x in query
-        ):
-            return query
-        else:
-            raise TypeError("Query must be either a string or a list of numbers.")
 
     def _validate_search(self, query_vector: list[float], k: int) -> None:
         if len(query_vector) != self._vector_dim:

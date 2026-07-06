@@ -1,4 +1,4 @@
-.PHONY: build run install test e2e test-all lint prompt-eval rag-eval
+.PHONY: build run install test e2e test-all lint prompt-eval rag-eval index
 
 build:
 	docker build -t repo-lens .
@@ -26,3 +26,6 @@ prompt-eval:
 
 rag-eval:
 	uv run src/rag_eval.py
+
+index:
+	uv run src/indexer.py
