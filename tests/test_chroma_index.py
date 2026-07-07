@@ -33,9 +33,9 @@ collection_name = "repo_chunks"
 
 def create_chroma_index(path: str) -> ChromaVectorIndex:
     return ChromaVectorIndex(
-        path=path,
         collection_name=collection_name,
         embedding_fn=fake_embedding_fn,
+        path=path,
     )
 
 

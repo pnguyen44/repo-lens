@@ -114,11 +114,12 @@ async def main() -> None:
         embedder = VoyageEmbedder(VoyageClient(), model=config.voyage_embed_model)
 
         vector_index = ChromaVectorIndex(
-            path=config.chroma_path,
             collection_name=CHROMA_COLLECTION_NAME,
             embedding_fn=lambda texts: embedder.generate_embeddings(
                 texts, input_type=InputType.DOCUMENT
             ),
+            host=config.chroma_host,
+            port=config.chroma_port,
         )
         bm25 = BM25Index()
         stored_docs = vector_index.get_all_documents()

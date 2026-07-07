@@ -9,12 +9,20 @@ from base_vector_index import BaseVectorIndex
 class ChromaVectorIndex(BaseVectorIndex):
     def __init__(
         self,
-        path: str,
+        *,
         collection_name: str,
         embedding_fn: Callable[[list[str]], list[list[float]]] | None = None,
+        host: str | None = None,
+        port: int = 8000,
+        path: str | None = None,
     ) -> None:
         super().__init__(embedding_fn=embedding_fn)
-        self._client = chromadb.PersistentClient(path=path)
+
+        if path:
+            self._client = chromadb.PersistentClient(path=path)
+        else:
+            self._client = chromadb.HttpClient(host=host, port=port)
+
         self._collection = self._client.get_or_create_collection(
             name=collection_name,
             metadata={"hnsw:space": "cosine"},

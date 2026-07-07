@@ -1,10 +1,22 @@
-.PHONY: build run install test e2e test-all lint prompt-eval rag-eval index
+.PHONY: build chroma run down clean-chroma install test e2e test-all lint prompt-eval rag-eval index
 
 build:
-	docker build -t repo-lens .
+	docker compose build
+
+chroma:
+	docker compose up -d chroma
 
 run:
-	docker run -it --env-file .env -v $(PWD)/src:/app/src -v $(PWD)/data:/app/data -v /var/run/docker.sock:/var/run/docker.sock repo-lens
+	docker compose down
+	docker compose up -d chroma
+	docker compose run --build --rm app
+
+down:
+	docker compose down
+
+clean-chroma:
+	docker compose down
+	sudo rm -rf ./data/chroma
 
 install:
 	uv sync --extra dev

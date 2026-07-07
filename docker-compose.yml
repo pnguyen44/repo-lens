@@ -1,0 +1,28 @@
+services:
+  chroma:
+    image: chromadb/chroma:1.5.9
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data/chroma:/data
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/8000"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  app:
+    build: .
+    env_file: .env
+    environment:
+      - CHROMA_HOST=chroma
+      - CHROMA_PORT=8000
+    volumes:
+      - ./src:/app/src
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      chroma:
+        condition: service_healthy
+    stdin_open: true
+    tty: true

@@ -13,7 +13,8 @@ class Config:
     default_org: str | None
     voyage_embed_model: str
     voyage_rerank_model: str
-    chroma_path: str
+    chroma_host: str
+    chroma_port: int
 
 
 def create_config() -> Config:
@@ -23,7 +24,8 @@ def create_config() -> Config:
     default_org = os.environ.get("DEFAULT_ORG") or None
     voyage_embed_model = os.environ.get("VOYAGE_EMBED_MODEL", "voyage-3-large")
     voyage_rerank_model = os.environ.get("VOYAGE_RERANK_MODEL", "rerank-2")
-    chroma_path = os.environ.get("CHROMA_PATH", "./data/chroma")
+    chroma_host = os.environ.get("CHROMA_HOST", "localhost")
+    chroma_port = int(os.environ.get("CHROMA_PORT", "8000"))
 
     if provider == "anthropic" and not os.environ.get("ANTHROPIC_API_KEY", ""):
         raise ValueError("ANTHROPIC_API_KEY is missing a value. Update .env")
@@ -41,5 +43,6 @@ def create_config() -> Config:
         default_org=default_org,
         voyage_embed_model=voyage_embed_model,
         voyage_rerank_model=voyage_rerank_model,
-        chroma_path=chroma_path,
+        chroma_host=chroma_host,
+        chroma_port=chroma_port,
     )

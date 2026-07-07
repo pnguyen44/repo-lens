@@ -49,9 +49,18 @@ Then edit `.env` with your values:
 
 ## Running the App
 
+The app runs as a multi-container stack via Docker Compose: the CLI app connects to a dedicated ChromaDB server for persistent vector storage.
+
 ```bash
-make build
 make run
+```
+
+This builds the app image, starts the ChromaDB server, waits for it to be healthy, and launches the CLI.
+
+To stop all containers:
+
+```bash
+make down
 ```
 
 ## RAG Pipeline
