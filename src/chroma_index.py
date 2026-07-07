@@ -7,12 +7,10 @@ from base_vector_index import BaseVectorIndex
 
 
 class ChromaVectorIndex(BaseVectorIndex):
-    METADATA_KEYS = ("repo", "section", "url")
-
     def __init__(
         self,
         path: str,
-        collection_name: str = "repo_chunks",
+        collection_name: str,
         embedding_fn: Callable[[list[str]], list[list[float]]] | None = None,
     ) -> None:
         super().__init__(embedding_fn=embedding_fn)
@@ -30,7 +28,7 @@ class ChromaVectorIndex(BaseVectorIndex):
         return hashlib.sha256(content.encode()).hexdigest()[:16]
 
     def _extract_metadata(self, document: dict[str, Any]) -> dict[str, str]:
-        return {key: document[key] for key in self.METADATA_KEYS if key in document}
+        return {key: value for key, value in document.items() if key != "content"}
 
     def _store(self, vector: list[float], document: dict[str, Any]) -> None:
         content = document["content"]
@@ -88,10 +86,18 @@ class ChromaVectorIndex(BaseVectorIndex):
             for doc_text, metadata in zip(results["documents"], results["metadatas"])
         ]
 
-    def has_repo(self, repo: str) -> bool:
-        results = self._collection.get(where={"repo": repo}, limit=1)
+    def exists_in_collection(self, metadata_key: str, metadata_value: str) -> bool:
+        results = self._collection.get(where={metadata_key: metadata_value}, limit=1)
+        if not results["ids"]:
+            return False
+        return True
 
-        return len(results["ids"]) > 0
+    def remove_from_collection(self, metadata_key: str, metadata_value: str) -> int:
+        results = self._collection.get(where={metadata_key: metadata_value})
+        if not results["ids"]:
+            return 0
+        self._collection.delete(ids=results["ids"])
+        return len(results["ids"])
 
     def __len__(self) -> int:
         return int(self._collection.count())

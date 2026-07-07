@@ -10,10 +10,13 @@ from chat import Chat
 from voyageai.client import Client as VoyageClient
 from embeddings import VoyageEmbedder, InputType
 from reranker import VoyageReranker
-from vector_index import VectorIndex
 from bm25_index import BM25Index
 from hybrid_retriever import HybridRetriever
 from provider import create_chat_client
+from chroma_index import ChromaVectorIndex
+
+
+CHROMA_COLLECTION_NAME = "repo_chunks"
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO").upper(),
@@ -69,19 +72,26 @@ async def validate_repo(github_mcp: MCPClient, owner: str, repo: str) -> bool:
 
 
 async def prompt_and_index(
-    github_mcp: MCPClient, retriever: HybridRetriever, owner: str
+    github_mcp: MCPClient,
+    retriever: HybridRetriever,
+    owner: str,
+    vector_index: ChromaVectorIndex,
 ) -> str:
     while True:
         repo = input("> Repo name: ")
         if not await validate_repo(github_mcp=github_mcp, owner=owner, repo=repo):
             continue
         try:
-            await index_repo(
-                mcp_client=github_mcp,
-                hybrid_retriever=retriever,
-                owner=owner,
-                repo=repo,
-            )
+            repo_key = f"{owner}/{repo}"
+            if vector_index.exists_in_collection("repo", repo_key):
+                print(f"'{repo_key}' already indexed, skipping.")
+            else:
+                await index_repo(
+                    mcp_client=github_mcp,
+                    hybrid_retriever=retriever,
+                    owner=owner,
+                    repo=repo,
+                )
         except Exception as e:
             logger.error("Could not index README: %s/%s: %s", owner, repo, e)
             logger.warning("Chat will work without RAG context.")
@@ -102,16 +112,28 @@ async def main() -> None:
         client = create_chat_client(config=config)
 
         embedder = VoyageEmbedder(VoyageClient(), model=config.voyage_embed_model)
-        vector_index = VectorIndex(
+
+        vector_index = ChromaVectorIndex(
+            path=config.chroma_path,
+            collection_name=CHROMA_COLLECTION_NAME,
             embedding_fn=lambda texts: embedder.generate_embeddings(
                 texts, input_type=InputType.DOCUMENT
-            )
+            ),
         )
         bm25 = BM25Index()
+        stored_docs = vector_index.get_all_documents()
+
+        if stored_docs:
+            bm25.add_documents(stored_docs)
+            logger.info("Loaded %d chunks from persistent storage.", len(stored_docs))
+
         retriever = HybridRetriever(vector_index, bm25)
 
         repo = await prompt_and_index(
-            github_mcp=github_mcp, retriever=retriever, owner=owner
+            github_mcp=github_mcp,
+            retriever=retriever,
+            owner=owner,
+            vector_index=vector_index,
         )
 
         print(

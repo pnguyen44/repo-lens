@@ -53,17 +53,17 @@ class HybridRetriever:
             index.search(query=query_text, k=k * 5) for index in self._indexes
         ]
 
-        doc_ranks: dict[int, dict[str, Any]] = {}
+        doc_ranks: dict[str, dict[str, Any]] = {}
         # For each unique document, gather its rank from each index
         for idx, results in enumerate(all_results):
             for rank, (doc, _) in enumerate(results, start=1):
-                doc_id = id(doc)
-                if doc_id not in doc_ranks:
-                    doc_ranks[doc_id] = {
+                match_key = doc["content"]
+                if match_key not in doc_ranks:
+                    doc_ranks[match_key] = {
                         "doc_obj": doc,
                         "ranks": [float("inf")] * len(self._indexes),
                     }
-                doc_ranks[doc_id]["ranks"][idx] = rank
+                doc_ranks[match_key]["ranks"][idx] = rank
 
         # Compute RRF score for each document using calc_rrf_score
         scored_docs: list[tuple[dict[str, Any], float]] = [
