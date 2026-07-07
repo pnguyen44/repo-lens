@@ -159,6 +159,20 @@ async def main() -> None:
                 user_input = input("> ")
                 if user_input.lower() in ("quit", "exit"):
                     break
+                if user_input.lower() == "/reindex":
+                    repo_key = f"{owner}/{repo}"
+                    print(f"Re-indexing {repo_key}...")
+                    vector_index.remove_from_collection("repo", repo_key)
+                    await index_repo(
+                        mcp_client=github_mcp,
+                        hybrid_retriever=retriever,
+                        owner=owner,
+                        repo=repo,
+                    )
+                    bm25.clear()
+                    bm25.add_documents(vector_index.get_all_documents())
+                    print(f"Re-indexed {repo_key} successfully.")
+                    continue
                 await chat.run(user_input)
         except KeyboardInterrupt:
             print("\nexiting")

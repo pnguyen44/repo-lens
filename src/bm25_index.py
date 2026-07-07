@@ -52,6 +52,15 @@ class BM25Index:
             self.documents.append(document)
             self._update_doc_stats(doc_tokens)
 
+    def clear(self) -> None:
+        self.documents = []
+        self._tokenized_docs = []
+        self._doc_len = []
+        self._doc_freqs = {}
+        self._avg_doc_len = 0.0
+        self._idf = {}
+        self._index_built = False
+
     def _update_doc_stats(self, doc_tokens: list[str]) -> None:
         # Record this document's token count
         self._doc_len.append(len(doc_tokens))
