@@ -9,7 +9,7 @@ chroma:
 run:
 	docker compose down
 	docker compose up -d chroma
-	docker compose run --build --rm app
+	docker compose run --rm app
 
 down:
 	docker compose down

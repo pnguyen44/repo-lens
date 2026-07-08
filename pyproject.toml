@@ -11,6 +11,7 @@ dependencies = [
     "numpy>=2.4.6",
     "python-dotenv",
     "rich",
+    "structlog>=26.1.0",
     "voyageai>=0.3.7",
 ]
 

@@ -2,6 +2,7 @@ import logging
 import os
 from contextlib import AsyncExitStack
 from typing import Any
+
 from config import create_config
 from rich import print
 from document_indexer import DocumentIndexer
@@ -17,14 +18,10 @@ from bm25_index import BM25Index
 from hybrid_retriever import HybridRetriever
 from provider import create_chat_client
 from chroma_index import ChromaVectorIndex
+from logging_config import configure_logging
 
 
 CHROMA_COLLECTION_NAME = "repo_chunks"
-
-logging.basicConfig(
-    level=os.getenv("LOG_LEVEL", "INFO").upper(),
-    format="%(asctime)s %(name)s %(levelname)s %(message)s",
-)
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +124,7 @@ async def chat_loop(
 
 
 async def main() -> None:
+    configure_logging(os.getenv("LOG_LEVEL", "INFO"))
     config = create_config()
 
     async with AsyncExitStack() as stack:

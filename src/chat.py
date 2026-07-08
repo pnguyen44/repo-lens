@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 from typing import Any, Optional
 
 
@@ -10,6 +11,7 @@ from mcp_client import MCPClient
 from tool_manager import ToolManager
 from anthropic import AuthenticationError, BadRequestError, RateLimitError
 from reranker import Reranker
+from trace_context import start_query_trace
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +80,8 @@ class Chat:
             return ""
 
     async def run(self, query: str, tool_choice: dict[str, Any] | None = None) -> str:
+        start_query_trace()
+        start_query = time.perf_counter()
         final_text_response = ""
 
         if not self.tools:
@@ -89,6 +93,7 @@ class Chat:
         retries = 0
         while True:
             try:
+                call_start = time.perf_counter()
                 with self.chat_client.chat_stream(
                     messages=self.messages,
                     tools=self.tools,
@@ -109,8 +114,29 @@ class Chat:
 
                     response = stream.get_final_message()
 
+                    call_ms = (time.perf_counter() - call_start) * 1000
+
                     if response.usage:
                         self.chat_client.record_usage(response.usage)
+                        usage = response.usage
+                        in_tok = (
+                            usage.get("input_tokens", 0)
+                            if isinstance(usage, dict)
+                            else getattr(usage, "input_tokens", 0)
+                        )
+                        out_tok = (
+                            usage.get("output_tokens", 0)
+                            if isinstance(usage, dict)
+                            else getattr(usage, "output_tokens", 0)
+                        )
+                        logger.info(
+                            "llm call",
+                            extra={
+                                "call_ms": round(call_ms, 2),
+                                "input_tokens": in_tok,
+                                "output_tokens": out_tok,
+                            },
+                        )
 
                     if not response.raw:
                         logger.warning(
@@ -173,4 +199,6 @@ class Chat:
                 await asyncio.sleep(wait)
                 retries += 1
                 continue
+        duration_ms = (time.perf_counter() - start_query) * 1000
+        logger.info("query completed", extra={"duration_ms": round(duration_ms, 2)})
         return final_text_response

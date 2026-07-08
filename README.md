@@ -55,7 +55,7 @@ The app runs as a multi-container stack via Docker Compose: the CLI app connects
 make run
 ```
 
-This builds the app image, starts the ChromaDB server, waits for it to be healthy, and launches the CLI.
+This starts the ChromaDB server, waits for it to be healthy, and launches the CLI. Source changes are picked up automatically via volume mount. Run `make build` after changing dependencies.
 
 To stop all containers:
 
