@@ -2,6 +2,7 @@ import asyncio
 import logging
 import time
 from typing import Any, Optional
+from enum import Enum
 
 
 from chat_client import ChatClient
@@ -16,6 +17,12 @@ from trace_context import start_query_trace
 logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 3
+
+
+class RunStatus(Enum):
+    DONE = "done"
+    TOOL_USE = "tool_use"
+    ERROR = "error"
 
 
 class Chat:
@@ -79,104 +86,119 @@ class Chat:
             logger.warning("context retrieval failed, proceeding without RAG")
             return ""
 
-    async def run(self, query: str, tool_choice: dict[str, Any] | None = None) -> str:
-        start_query_trace()
-        start_query = time.perf_counter()
-        final_text_response = ""
-
+    async def _prepare_query(self, query: str) -> None:
         if not self.tools:
             self.tools = await ToolManager.get_all_tools(self.mcp_clients)
 
         augmented_query = self._build_context(query) or query
         self.chat_client.add_user_message(self.messages, augmented_query)
 
+    def _stream_and_log(
+        self, tool_choice: dict[str, Any] | None = None
+    ) -> tuple[Any, str]:
+        call_start = time.perf_counter()
+        text = ""
+        with self.chat_client.chat_stream(
+            messages=self.messages,
+            tools=self.tools,
+            system=self.system_prompt,
+            web_search=self.web_search,
+            tool_choice=tool_choice,
+        ) as stream:
+            for chunk in stream:
+                if chunk.type == "text":
+                    print(chunk.text, end="")
+                    text += chunk.text
+                elif chunk.type == "tool_start":
+                    print(f'\n>>> Tool Call: "{chunk.tool_name}"')
+                elif chunk.type == "tool_input":
+                    print(chunk.partial_json, end="")
+                elif chunk.type == "tool_stop":
+                    print()
+
+            response = stream.get_final_message()
+
+            call_ms = (time.perf_counter() - call_start) * 1000
+            if response.usage:
+                self.chat_client.record_usage(response.usage)
+                usage = response.usage
+                in_tok = (
+                    usage.get("input_tokens", 0)
+                    if isinstance(usage, dict)
+                    else getattr(usage, "input_tokens", 0)
+                )
+                out_tok = (
+                    usage.get("output_tokens", 0)
+                    if isinstance(usage, dict)
+                    else getattr(usage, "output_tokens", 0)
+                )
+                logger.info(
+                    "llm call",
+                    extra={
+                        "call_ms": round(call_ms, 2),
+                        "input_tokens": in_tok,
+                        "output_tokens": out_tok,
+                    },
+                )
+
+            return response, text
+
+    def _process_response(self, response: Any) -> RunStatus:
+        if not response.raw:
+            logger.warning(
+                "Stream completed but no raw response available (stop_reason=%s)",
+                response.stop_reason,
+            )
+            return RunStatus.ERROR
+        if self.chat_client.has_web_search_results(response.raw):
+            logger.info("Web search tool called")
+
+        titles = self.chat_client.extract_citation_titles(response.raw)
+        if titles:
+            print("\nSources: " + ", ".join(titles))
+
+        self.chat_client.add_assistant_message(self.messages, response)
+
+        if response.stop_reason != "tool_use":
+            return RunStatus.DONE
+
+        return RunStatus.TOOL_USE
+
+    async def _execute_tools(self, response: Any) -> None:
+        tool_names = [
+            b.get("name") if isinstance(b, dict) else getattr(b, "name", None)
+            for b in response.tool_calls
+        ]
+        logger.info("Tool call: %s", tool_names)
+
+        tool_result_parts = await ToolManager.execute_tool_requests(
+            clients=self.mcp_clients, message=response.raw
+        )
+
+        self.chat_client.add_user_message(
+            messages=self.messages,
+            content=tool_result_parts,
+        )
+
+    async def run(self, query: str, tool_choice: dict[str, Any] | None = None) -> str:
+        start_query_trace()
+        start_query = time.perf_counter()
+        final_text_response = ""
+
+        await self._prepare_query(query)
+
         retries = 0
         while True:
             try:
-                call_start = time.perf_counter()
-                with self.chat_client.chat_stream(
-                    messages=self.messages,
-                    tools=self.tools,
-                    system=self.system_prompt,
-                    web_search=self.web_search,
-                    tool_choice=tool_choice,
-                ) as stream:
-                    for chunk in stream:
-                        if chunk.type == "text":
-                            print(chunk.text, end="")
-                            final_text_response += chunk.text
-                        elif chunk.type == "tool_start":
-                            print(f'\n>>> Tool Call: "{chunk.tool_name}"')
-                        elif chunk.type == "tool_input":
-                            print(chunk.partial_json, end="")
-                        elif chunk.type == "tool_stop":
-                            print()
+                response, text = self._stream_and_log(tool_choice)
+                final_text_response += text
 
-                    response = stream.get_final_message()
+                status = self._process_response(response)
+                if status != RunStatus.TOOL_USE:
+                    break
 
-                    call_ms = (time.perf_counter() - call_start) * 1000
-
-                    if response.usage:
-                        self.chat_client.record_usage(response.usage)
-                        usage = response.usage
-                        in_tok = (
-                            usage.get("input_tokens", 0)
-                            if isinstance(usage, dict)
-                            else getattr(usage, "input_tokens", 0)
-                        )
-                        out_tok = (
-                            usage.get("output_tokens", 0)
-                            if isinstance(usage, dict)
-                            else getattr(usage, "output_tokens", 0)
-                        )
-                        logger.info(
-                            "llm call",
-                            extra={
-                                "call_ms": round(call_ms, 2),
-                                "input_tokens": in_tok,
-                                "output_tokens": out_tok,
-                            },
-                        )
-
-                    if not response.raw:
-                        logger.warning(
-                            "Stream completed but no raw response available (stop_reason=%s)",
-                            response.stop_reason,
-                        )
-                        break
-
-                    if self.chat_client.has_web_search_results(response.raw):
-                        logger.info("Web search tool called")
-
-                    titles = self.chat_client.extract_citation_titles(response.raw)
-                    if titles:
-                        print("\nSources: " + ", ".join(titles))
-
-                    self.chat_client.add_assistant_message(self.messages, response)
-
-                    if response.stop_reason != "tool_use":
-                        break
-
-                    tool_names = [
-                        b.get("name")
-                        if isinstance(b, dict)
-                        else getattr(b, "name", None)
-                        for b in response.tool_calls
-                    ]
-                    logger.info("Tool call: %s", tool_names)
-
-                    tool_result_parts = await ToolManager.execute_tool_requests(
-                        clients=self.mcp_clients, message=response.raw
-                    )
-
-                    self.chat_client.add_user_message(
-                        messages=self.messages,
-                        content=tool_result_parts,
-                    )
-
-                    if tool_choice:
-                        tool_choice = None
-                        continue
+                await self._execute_tools(response)
+                tool_choice = None
 
             except BadRequestError as e:
                 if "credit balance is too low" in str(e):

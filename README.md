@@ -39,13 +39,14 @@ Copy the example environment file and fill in your values:
 cp .env.example .env
 ```
 
-Then edit `.env` with your values:
+At minimum, you need:
 
-- `ANTHROPIC_API_KEY` — Claude API key
-- `MODEL` — model to use (e.g. `claude-haiku-4-5`, `gemini-3.5-flash`)
+- `MODEL` — LLM model to use (e.g. `claude-haiku-4-5`, `gemini-2.5-flash`)
 - `GITHUB_TOKEN` — GitHub personal access token
-- `DEFAULT_ORG` — default GitHub org for repo lookups
+- An API key for your chosen provider (`ANTHROPIC_API_KEY` or `GEMINI_API_KEY`)
 - `VOYAGE_API_KEY` — VoyageAI API key for embeddings
+
+See `.env.example` for all available options and defaults.
 
 ## Running the App
 
