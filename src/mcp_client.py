@@ -1,4 +1,5 @@
 import logging
+import os
 from types import TracebackType
 from typing import Self
 
@@ -77,15 +78,22 @@ class MCPClient:
 
 
 def create_github_client(github_token: str) -> MCPClient:
+    args = [
+        "run",
+        "-i",
+        "--rm",
+        "-e",
+        "GITHUB_PERSONAL_ACCESS_TOKEN",
+    ]
+
+    log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+    if log_level in ("WARNING", "ERROR", "CRITICAL"):
+        args.extend(["-e", "GITHUB_LOG_FILE=/dev/null"])
+
+    args.append("ghcr.io/github/github-mcp-server")
+
     return MCPClient(
         command="docker",
-        args=[
-            "run",
-            "-i",
-            "--rm",
-            "-e",
-            "GITHUB_PERSONAL_ACCESS_TOKEN",
-            "ghcr.io/github/github-mcp-server",
-        ],
+        args=args,
         env={"GITHUB_PERSONAL_ACCESS_TOKEN": github_token},
     )
