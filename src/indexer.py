@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 from bm25_index import BM25Index
 from embeddings import VoyageEmbedder, InputType
 from hybrid_retriever import HybridRetriever
@@ -37,15 +38,14 @@ async def fetch_readme(mcp_client: MCPClient, owner: str, repo: str) -> str:
     return readme_text
 
 
-async def index_repo(
-    mcp_client: MCPClient, hybrid_retriever: HybridRetriever, owner: str, repo: str
-) -> int:
-    """Fetch repo README, chunk it, embed each chunk, and store in the index."""
-    readme = await fetch_readme(mcp_client=mcp_client, owner=owner, repo=repo)
+async def fetch_repo_chunks(
+    github_mcp: MCPClient, owner: str, repo: str
+) -> list[dict[str, Any]]:
+    readme = await fetch_readme(mcp_client=github_mcp, owner=owner, repo=repo)
     chunks = [c for c in chunk_by_section(readme) if c.strip()]
 
     if not chunks:
-        return 0
+        return []
 
     repo_name = f"{owner}/{repo}"
     logger.info("Indexing %s", repo_name)
@@ -59,8 +59,7 @@ async def index_repo(
             {"content": chunk, "repo": repo_name, "section": section, "url": url}
         )
 
-    hybrid_retriever.add_documents(documents)
-    return len(hybrid_retriever)
+    return documents
 
 
 async def main() -> None:
@@ -80,27 +79,30 @@ async def main() -> None:
     retriever = HybridRetriever(vector_index, bm25)
 
     async with create_github_client(config.github_token) as mcp_client:
-        count = await index_repo(
-            mcp_client=mcp_client,
-            hybrid_retriever=retriever,
+        documents = await fetch_repo_chunks(
+            github_mcp=mcp_client,
             owner=owner,
             repo=repo,
         )
 
-        print(f"Indexed {count} chunks from {owner}/{repo}\n")
+    count = len(documents)
 
-        query = "How does the API work?"
-        print(f'Query: "{query}"\n')
+    print(f"Indexed {count} chunks from {owner}/{repo}\n")
 
-        results = retriever.search(query_text=query, k=NUM_RESULTS)
+    retriever.add_documents(documents)
 
-        for i, (doc, distance) in enumerate(results, 1):
-            print(f"Result {i} (distance: {distance:.4f})")
-            print(f"Repo: {doc['repo']}")
-            print("content:")
-            print(doc["content"][:PREVIEW_LENGTH])
-            print("──────────────────────────────")
-            print()
+    query = "How does the API work?"
+    print(f'Query: "{query}"\n')
+
+    results = retriever.search(query_text=query, k=NUM_RESULTS)
+
+    for i, (doc, distance) in enumerate(results, 1):
+        print(f"Result {i} (distance: {distance:.4f})")
+        print(f"Repo: {doc['repo']}")
+        print("content:")
+        print(doc["content"][:PREVIEW_LENGTH])
+        print("──────────────────────────────")
+        print()
 
 
 if __name__ == "__main__":

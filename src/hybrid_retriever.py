@@ -1,4 +1,6 @@
-from typing import Any, Protocol
+from typing import Any
+
+from protocols import SearchIndex
 
 
 def validate_document(document: dict[str, Any], index: int | None = None) -> None:
@@ -12,16 +14,6 @@ def validate_document(document: dict[str, Any], index: int | None = None) -> Non
 
     if not isinstance(document["content"], str):
         raise TypeError(f"{prefix}Document 'content' must be a string.")
-
-
-class SearchIndex(Protocol):
-    def add_document(self, document: dict[str, Any]) -> None: ...
-
-    def add_documents(self, documents: list[dict[str, Any]]) -> None: ...
-
-    def search(self, query: Any, k: int = 1) -> list[tuple[dict[str, Any], float]]: ...
-
-    def __len__(self) -> int: ...
 
 
 class HybridRetriever:
@@ -82,6 +74,15 @@ class HybridRetriever:
         # RRF formula: sum( 1 / (k_rrf + rank) ) for each rank
         # Higher score = more relevant (appeared high across multiple indexes)
         return sum(1 / (k_rrf + rank) for rank in ranks if rank != float("inf"))
+
+    def reload(self, documents: list[dict[str, Any]]) -> None:
+        self.clear()
+        self.add_documents(documents)
+
+    def clear(self) -> None:
+        for index in self._indexes:
+            if hasattr(index, "clear"):
+                index.clear()
 
     def __len__(self) -> int:
         return len(self._indexes[0])

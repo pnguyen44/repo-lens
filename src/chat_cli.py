@@ -1,12 +1,15 @@
 import logging
 import os
 from contextlib import AsyncExitStack
+from typing import Any
 from config import create_config
 from rich import print
-from indexer import index_repo
+from document_indexer import DocumentIndexer
+from indexer import fetch_repo_chunks
 from mcp_client import MCPClient, create_github_client
 import asyncio
 from chat import Chat
+from chat_client import ChatClient
 from voyageai.client import Client as VoyageClient
 from embeddings import VoyageEmbedder, InputType
 from reranker import VoyageReranker
@@ -71,32 +74,56 @@ async def validate_repo(github_mcp: MCPClient, owner: str, repo: str) -> bool:
         return False
 
 
-async def prompt_and_index(
-    github_mcp: MCPClient,
-    retriever: HybridRetriever,
-    owner: str,
-    vector_index: ChromaVectorIndex,
-) -> str:
+async def resolve_repo(github_mcp: MCPClient, owner: str) -> str:
     while True:
         repo = input("> Repo name: ")
-        if not await validate_repo(github_mcp=github_mcp, owner=owner, repo=repo):
-            continue
-        try:
-            repo_key = f"{owner}/{repo}"
-            if vector_index.exists_in_collection("repo", repo_key):
-                print(f"'{repo_key}' already indexed, skipping.")
-            else:
-                await index_repo(
-                    mcp_client=github_mcp,
-                    hybrid_retriever=retriever,
+        if await validate_repo(github_mcp=github_mcp, owner=owner, repo=repo):
+            return repo
+
+
+async def ensure_indexed(
+    github_mcp: MCPClient, owner: str, document_indexer: DocumentIndexer
+) -> str:
+    repo = await resolve_repo(github_mcp=github_mcp, owner=owner)
+
+    repo_key = f"{owner}/{repo}"
+
+    if not document_indexer.exits(key="repo", value=repo_key):
+        docs = await fetch_repo_chunks(github_mcp=github_mcp, owner=owner, repo=repo)
+
+        document_indexer.index(docs)
+    return repo
+
+
+async def chat_loop(
+    chat: Chat,
+    github_mcp: MCPClient,
+    owner: str,
+    repo: str,
+    document_indexer: DocumentIndexer,
+    client: ChatClient[Any],
+) -> None:
+    try:
+        while True:
+            user_input = input("> ")
+            if user_input.lower() in ("quit", "exit"):
+                break
+            if user_input.lower() == "/reindex":
+                repo_key = f"{owner}/{repo}"
+                print(f"Re-indexing {repo_key}...")
+                docs = await fetch_repo_chunks(
+                    github_mcp=github_mcp,
                     owner=owner,
                     repo=repo,
                 )
-        except Exception as e:
-            logger.error("Could not index README: %s/%s: %s", owner, repo, e)
-            logger.warning("Chat will work without RAG context.")
-
-        return repo
+                document_indexer.reindex(key="repo", value=repo_key, documents=docs)
+                print(f"Re-indexed {repo_key} successfully.")
+                continue
+            await chat.run(user_input)
+    except KeyboardInterrupt:
+        print("\nexiting")
+    finally:
+        print(client.token_tracker.summary())
 
 
 async def main() -> None:
@@ -122,19 +149,20 @@ async def main() -> None:
             port=config.chroma_port,
         )
         bm25 = BM25Index()
-        stored_docs = vector_index.get_all_documents()
-
-        if stored_docs:
-            bm25.add_documents(stored_docs)
-            logger.info("Loaded %d chunks from persistent storage.", len(stored_docs))
 
         retriever = HybridRetriever(vector_index, bm25)
 
-        repo = await prompt_and_index(
-            github_mcp=github_mcp,
-            retriever=retriever,
-            owner=owner,
-            vector_index=vector_index,
+        document_indexer = DocumentIndexer(
+            vector_index=vector_index, retriever=retriever
+        )
+
+        count = document_indexer.load_from_store()
+
+        if count > 0:
+            logger.info("Loaded %d chunks from persistent storage.", count)
+
+        repo = await ensure_indexed(
+            github_mcp=github_mcp, owner=owner, document_indexer=document_indexer
         )
 
         print(
@@ -154,30 +182,14 @@ async def main() -> None:
             reranker=reranker,
         )
 
-        try:
-            while True:
-                user_input = input("> ")
-                if user_input.lower() in ("quit", "exit"):
-                    break
-                if user_input.lower() == "/reindex":
-                    repo_key = f"{owner}/{repo}"
-                    print(f"Re-indexing {repo_key}...")
-                    vector_index.remove_from_collection("repo", repo_key)
-                    await index_repo(
-                        mcp_client=github_mcp,
-                        hybrid_retriever=retriever,
-                        owner=owner,
-                        repo=repo,
-                    )
-                    bm25.clear()
-                    bm25.add_documents(vector_index.get_all_documents())
-                    print(f"Re-indexed {repo_key} successfully.")
-                    continue
-                await chat.run(user_input)
-        except KeyboardInterrupt:
-            print("\nexiting")
-        finally:
-            print(client.token_tracker.summary())
+        await chat_loop(
+            chat=chat,
+            github_mcp=github_mcp,
+            owner=owner,
+            repo=repo,
+            document_indexer=document_indexer,
+            client=client,
+        )
 
 
 if __name__ == "__main__":
