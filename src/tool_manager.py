@@ -2,8 +2,8 @@ import json
 import logging
 from mcp_client import MCPClient
 from mcp.types import CallToolResult, TextContent
-from anthropic.types import Message, ToolResultBlockParam
 from typing import Any, Optional, Literal
+from chat_client import ToolCall
 
 logger = logging.getLogger(__name__)
 
@@ -37,10 +37,11 @@ class ToolManager:
 
     @staticmethod
     def _build_tool_result_part(
-        tool_use_id: str, text: str, status: Literal["success", "error"]
-    ) -> ToolResultBlockParam:
+        tool_use_id: str, name: str, text: str, status: Literal["success", "error"]
+    ) -> dict[str, Any]:
         return {
             "tool_use_id": tool_use_id,
+            "name": name,
             "type": "tool_result",
             "content": text,
             "is_error": status == "error",
@@ -48,21 +49,20 @@ class ToolManager:
 
     @classmethod
     async def execute_tool_requests(
-        cls, clients: dict[str, MCPClient], message: Message
-    ) -> list[ToolResultBlockParam]:
-        tool_requests = [block for block in message.content if block.type == "tool_use"]
-
-        tool_result_blocks: list[ToolResultBlockParam] = []
-        for tool_request in tool_requests:
-            tool_use_id = tool_request.id
-            tool_name = tool_request.name
-            tool_input = tool_request.input
+        cls, clients: dict[str, MCPClient], tool_calls: list[ToolCall]
+    ) -> list[dict[str, Any]]:
+        tool_result_blocks: list[dict[str, Any]] = []
+        for tool_call in tool_calls:
+            tool_use_id = tool_call.id
+            tool_name = tool_call.name
+            tool_input = tool_call.input
 
             client = await cls._find_client_with_tool(list(clients.values()), tool_name)
 
             if not client:
                 tool_result_part = cls._build_tool_result_part(
                     tool_use_id=tool_use_id,
+                    name=tool_name,
                     text="could not find the tools",
                     status="error",
                 )
@@ -89,6 +89,7 @@ class ToolManager:
                 content_json = json.dumps(content_list)
                 tool_result_part = cls._build_tool_result_part(
                     tool_use_id=tool_use_id,
+                    name=tool_name,
                     text=content_json,
                     status=result_status,
                 )
@@ -97,6 +98,7 @@ class ToolManager:
                 logger.error(error_message)
                 tool_result_part = cls._build_tool_result_part(
                     tool_use_id=tool_use_id,
+                    name=tool_name,
                     text=json.dumps({"error": error_message}),
                     status="error",
                 )

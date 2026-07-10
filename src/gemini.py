@@ -1,3 +1,4 @@
+import json
 import logging
 from typing import Any, Unpack, Iterator
 
@@ -9,6 +10,7 @@ from chat_client import (
     MessageStream,
     StreamChunk,
     StreamResponse,
+    ToolCall,
 )
 from token_tracker import UsagePayload
 
@@ -26,11 +28,26 @@ def _extract_usage(response: Any) -> UsagePayload | None:
     }
 
 
+def _extract_tool_calls(interaction: Any) -> list[ToolCall]:
+    tool_calls = []
+    for step in getattr(interaction, "steps", []):
+        if getattr(step, "type", None) == "function_call":
+            tool_calls.append(
+                ToolCall(
+                    id=step.id,
+                    name=step.name,
+                    input=dict(step.arguments),
+                )
+            )
+    return tool_calls
+
+
 class GeminiStream:
     def __init__(self, stream: Any) -> None:
         self._stream: Any = stream
         self._interaction: Any = None
         self._text_parts: list[str] = []
+        self._pending_calls: dict[int, dict[str, Any]] = {}
 
     def __enter__(self) -> "GeminiStream":
         return self
@@ -45,16 +62,79 @@ class GeminiStream:
         while True:
             chunk = next(self._stream)
 
-            if chunk.event_type == "interaction.completed":
-                self._interaction = chunk.interaction
-                raise StopIteration
+            match chunk.event_type:
+                case "interaction.completed":
+                    self._interaction = chunk.interaction
+                    raise StopIteration
 
-            if chunk.event_type == "step.delta" and chunk.delta.type == "text":
-                self._text_parts.append(chunk.delta.text)
-                return StreamChunk(type="text", text=chunk.delta.text)
+                case "error":
+                    error = getattr(chunk, "error", None)
+                    msg = getattr(error, "message", str(error)) if error else str(chunk)
+                    logger.error("Gemini stream error: %s", msg)
+                    raise RuntimeError(f"Gemini stream error: {msg}")
+
+                case "step.start" if (
+                    getattr(chunk.step, "type", None) == "function_call"
+                ):
+                    initial_args = ""
+                    if hasattr(chunk.step, "arguments") and chunk.step.arguments:
+                        if isinstance(chunk.step.arguments, dict):
+                            initial_args = json.dumps(chunk.step.arguments)
+                        else:
+                            initial_args = chunk.step.arguments
+
+                    self._pending_calls[chunk.index] = {
+                        "id": chunk.step.id,
+                        "name": chunk.step.name,
+                        "arguments": initial_args,
+                    }
+
+                    return StreamChunk(type="tool_start", tool_name=chunk.step.name)
+
+                case "step.delta":
+                    match chunk.delta.type:
+                        case "text":
+                            self._text_parts.append(chunk.delta.text)
+                            return StreamChunk(type="text", text=chunk.delta.text)
+
+                        case "arguments":
+                            if chunk.index in self._pending_calls:
+                                self._pending_calls[chunk.index]["arguments"] += (
+                                    chunk.delta.partial_arguments
+                                )
+                            return StreamChunk(
+                                type="tool_input",
+                                partial_json=chunk.delta.partial_arguments,
+                            )
+
+                case "step.stop":
+                    return StreamChunk(type="tool_stop")
 
     def get_final_message(self) -> StreamResponse:
         text = "".join(self._text_parts)
+
+        steps: list[dict[str, Any]] = []
+        tool_calls = []
+
+        if text:
+            steps.append(
+                {"type": "model_output", "content": [{"type": "text", "text": text}]}
+            )
+
+        for call in self._pending_calls.values():
+            call_id = call["id"]
+            name = call["name"]
+            args = json.loads(call["arguments"]) if call["arguments"] else {}
+            tool_calls.append(ToolCall(id=call_id, name=name, input=args))
+            steps.append(
+                {
+                    "type": "function_call",
+                    "name": name,
+                    "id": call_id,
+                    "arguments": args,
+                }
+            )
+
         if not self._interaction:
             return StreamResponse(text=text)
 
@@ -62,7 +142,9 @@ class GeminiStream:
 
         return StreamResponse(
             text=text,
-            stop_reason=self._interaction.status,
+            stop_reason="tool_use" if tool_calls else self._interaction.status,
+            tool_calls=tool_calls,
+            steps=steps,
             usage=usage,
             raw=self._interaction,
         )
@@ -71,6 +153,7 @@ class GeminiStream:
 class Gemini(ChatClient[GenaiClient]):
     def __init__(self, client: GenaiClient, model: str) -> None:
         super().__init__(client, model)
+        self._previous_interaction_id: str | None = None
 
     def build_document_block(self, content: str, title: str) -> dict[str, Any]:
         return {
@@ -81,6 +164,21 @@ class Gemini(ChatClient[GenaiClient]):
     def add_user_message(self, messages: list[Any], content: str | list[Any]) -> None:
         if isinstance(content, str):
             text = content
+        elif (
+            content
+            and isinstance(content[0], dict)
+            and content[0].get("type") == "tool_result"
+        ):
+            for result in content:
+                messages.append(
+                    {
+                        "type": "function_result",
+                        "name": result["name"],
+                        "call_id": result["tool_use_id"],
+                        "result": [{"type": "text", "text": result["content"]}],
+                    }
+                )
+            return
         else:
             text = "\n\n".join(block["text"] for block in content)
 
@@ -97,40 +195,44 @@ class Gemini(ChatClient[GenaiClient]):
             )
             return
 
-        raw = message.raw
-        if hasattr(raw, "steps") and raw.steps:
-            for step in raw.steps:
-                messages.append(step.model_dump())
-            return
+        self._previous_interaction_id = message.raw.id
+        messages.clear()
 
-        messages.append(
-            {
-                "type": "model_output",
-                "content": [{"type": "text", "text": message.text}],
-            }
-        )
-
-    def chat(self, messages: list[Any], **kwargs: Unpack[ChatParams]) -> StreamResponse:
+    def _build_params(
+        self, messages: list[Any], **kwargs: Unpack[ChatParams]
+    ) -> dict[str, Any]:
         params: dict[str, Any] = {
             "model": self.model,
-            "store": False,
             "input": messages,
         }
+
+        if self._previous_interaction_id:
+            params["previous_interaction_id"] = self._previous_interaction_id
 
         system = kwargs.get("system")
         if system:
             params["system_instruction"] = system
 
-        response = self.client.interactions.create(**params)
+        tools = kwargs.get("tools")
+        if tools:
+            params["tools"] = self._to_gemini_tools(tools)
 
+        return params
+
+    def chat(self, messages: list[Any], **kwargs: Unpack[ChatParams]) -> StreamResponse:
+        params = self._build_params(messages, **kwargs)
+
+        response = self.client.interactions.create(**params)
         usage = _extract_usage(response)
+        tool_calls = _extract_tool_calls(response)
 
         if usage:
             self.record_usage(usage)
 
         return StreamResponse(
             text=self._text_from_message(response),
-            stop_reason=getattr(response, "status", ""),
+            stop_reason="tool_use" if tool_calls else getattr(response, "status", ""),
+            tool_calls=tool_calls,
             usage=usage,
             raw=response,
         )
@@ -138,17 +240,8 @@ class Gemini(ChatClient[GenaiClient]):
     def chat_stream(
         self, messages: list[Any], **kwargs: Unpack[ChatParams]
     ) -> MessageStream:
-        params: dict[str, Any] = {
-            "model": self.model,
-            "input": messages,
-            "stream": True,
-            "store": False,
-        }
-
-        system = kwargs.get("system")
-
-        if system:
-            params["system_instruction"] = system
+        params = self._build_params(messages, **kwargs)
+        params["stream"] = True
 
         stream = self.client.interactions.create(**params)
 
@@ -167,3 +260,15 @@ class Gemini(ChatClient[GenaiClient]):
             usage.get("input_tokens", 0),
             usage.get("output_tokens", 0),
         )
+
+    @staticmethod
+    def _to_gemini_tools(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return [
+            {
+                "type": "function",
+                "name": tool["name"],
+                "description": tool["description"],
+                "parameters": tool["input_schema"],
+            }
+            for tool in tools
+        ]

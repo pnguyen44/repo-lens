@@ -7,6 +7,13 @@ from token_tracker import TokenTracker
 
 
 @dataclass
+class ToolCall:
+    id: str
+    name: str
+    input: dict[str, Any]
+
+
+@dataclass
 class StreamChunk:
     type: str
     text: str = ""
@@ -19,6 +26,7 @@ class StreamResponse:
     text: str = ""
     stop_reason: str = ""
     tool_calls: list[Any] = field(default_factory=list)
+    steps: list[dict[str, Any]] = field(default_factory=list)
     usage: Any = None
     raw: Any = None
 

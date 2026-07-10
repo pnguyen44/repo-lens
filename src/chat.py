@@ -29,6 +29,7 @@ class Chat:
     def __init__(
         self,
         chat_client: ChatClient[Any],
+        *,
         mcp_clients: dict[str, MCPClient],
         system_prompt: str | None = None,
         embedder: Optional[Embedder] = None,
@@ -172,7 +173,7 @@ class Chat:
         logger.info("Tool call: %s", tool_names)
 
         tool_result_parts = await ToolManager.execute_tool_requests(
-            clients=self.mcp_clients, message=response.raw
+            clients=self.mcp_clients, tool_calls=response.tool_calls
         )
 
         self.chat_client.add_user_message(

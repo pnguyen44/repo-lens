@@ -10,6 +10,7 @@ from chat_client import (
     MessageStream,
     StreamChunk,
     StreamResponse,
+    ToolCall,
 )
 from token_tracker import UsagePayload
 
@@ -63,7 +64,11 @@ class ClaudeStream:
         self._response = message
 
         stop_reason = message.stop_reason or "end_turn"
-        tool_calls = [b for b in message.content if b.type == "tool_use"]
+        tool_calls = [
+            ToolCall(id=b.id, name=b.name, input=b.input)
+            for b in message.content
+            if b.type == "tool_use"
+        ]
 
         return StreamResponse(
             text="".join(self._text_parts),
