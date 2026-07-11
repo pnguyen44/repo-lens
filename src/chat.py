@@ -4,8 +4,7 @@ import time
 from typing import Any, Optional
 from enum import Enum
 
-
-from chat_client import ChatClient
+from chat_client import ChatClient, StreamError
 from embeddings import Embedder
 from hybrid_retriever import HybridRetriever
 from mcp_client import MCPClient
@@ -111,7 +110,7 @@ class Chat:
                     print(chunk.text, end="")
                     text += chunk.text
                 elif chunk.type == "tool_start":
-                    print(f'\n>>> Tool Call: "{chunk.tool_name}"')
+                    print(f'\nTool Call: "{chunk.tool_name}"')
                 elif chunk.type == "tool_input":
                     print(chunk.partial_json, end="")
                 elif chunk.type == "tool_stop":
@@ -222,6 +221,14 @@ class Chat:
                 await asyncio.sleep(wait)
                 retries += 1
                 continue
+            except StreamError as e:
+                logger.error("Stream error: %s", e)
+                print(f"\nStream error: {e}")
+                break
+            except Exception as e:
+                logger.exception("Unexpected error: %s", e)
+                print(f"\nUnexpected error: {e}")
+                break
         duration_ms = (time.perf_counter() - start_query) * 1000
         logger.info("query completed", extra={"duration_ms": round(duration_ms, 2)})
         return final_text_response

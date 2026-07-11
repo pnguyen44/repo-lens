@@ -31,6 +31,10 @@ class StreamResponse:
     raw: Any = None
 
 
+class StreamError(Exception):
+    pass
+
+
 class MessageStream(Protocol):
     def __enter__(self) -> Self: ...
     def __exit__(self, *args: Any) -> None: ...

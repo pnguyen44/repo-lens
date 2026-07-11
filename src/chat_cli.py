@@ -127,6 +127,8 @@ async def main() -> None:
     configure_logging(os.getenv("LOG_LEVEL", "INFO"))
     config = create_config()
 
+    print(f"Chatting with provider: {config.provider}, model: {config.model}")
+
     async with AsyncExitStack() as stack:
         github_mcp = await stack.enter_async_context(
             create_github_client(config.github_token)
@@ -163,9 +165,7 @@ async def main() -> None:
             github_mcp=github_mcp, owner=owner, document_indexer=document_indexer
         )
 
-        print(
-            f"Chatting about {owner}/{repo} (provider: {config.provider}, model: {config.model})"
-        )
+        print(f"Chatting about {owner}/{repo}")
 
         reranker = VoyageReranker(
             client=VoyageClient(), model=config.voyage_rerank_model

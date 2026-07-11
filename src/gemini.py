@@ -14,6 +14,8 @@ from chat_client import (
 )
 from token_tracker import UsagePayload
 
+from chat_client import StreamError
+
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +73,7 @@ class GeminiStream:
                     error = getattr(chunk, "error", None)
                     msg = getattr(error, "message", str(error)) if error else str(chunk)
                     logger.error("Gemini stream error: %s", msg)
-                    raise RuntimeError(f"Gemini stream error: {msg}")
+                    raise StreamError(f"Gemini stream error: {msg}")
 
                 case "step.start" if (
                     getattr(chunk.step, "type", None) == "function_call"
