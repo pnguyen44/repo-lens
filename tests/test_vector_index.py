@@ -1,4 +1,5 @@
 import pytest
+
 from vector_index import VectorIndex
 
 vec1 = [1.0, 0.0, 0.0]

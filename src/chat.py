@@ -29,7 +29,7 @@ class Chat:
         self,
         chat_client: ChatClient[Any],
         *,
-        mcp_clients: dict[str, MCPClient],
+        mcp_clients: dict[str, MCPClient] | None = None,
         system_prompt: str | None = None,
         embedder: Optional[Embedder] = None,
         hybrid_retriever: Optional[HybridRetriever] = None,
@@ -37,7 +37,7 @@ class Chat:
         reranker: Optional[Reranker] = None,
     ) -> None:
         self.chat_client = chat_client
-        self.mcp_clients = mcp_clients
+        self.mcp_clients = mcp_clients or {}
         self.system_prompt = system_prompt
         self.tools: list[Any] = []
         self.messages: list[Any] = []
