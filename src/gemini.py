@@ -1,21 +1,19 @@
 import json
 import logging
-from typing import Any, Unpack, Iterator
+from typing import Any, Iterator, Unpack
 
 from google.genai import Client as GenaiClient
 
 from chat_client import (
     ChatClient,
     ChatParams,
+    ChatResponse,
     MessageStream,
     StreamChunk,
-    StreamResponse,
+    StreamError,
     ToolCall,
 )
 from token_tracker import UsagePayload
-
-from chat_client import StreamError
-
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +110,7 @@ class GeminiStream:
                 case "step.stop":
                     return StreamChunk(type="tool_stop")
 
-    def get_final_message(self) -> StreamResponse:
+    def get_final_message(self) -> ChatResponse:
         text = "".join(self._text_parts)
 
         steps: list[dict[str, Any]] = []
@@ -138,11 +136,11 @@ class GeminiStream:
             )
 
         if not self._interaction:
-            return StreamResponse(text=text)
+            return ChatResponse(text=text)
 
         usage = _extract_usage(self._interaction)
 
-        return StreamResponse(
+        return ChatResponse(
             text=text,
             stop_reason="tool_use" if tool_calls else self._interaction.status,
             tool_calls=tool_calls,
@@ -189,7 +187,7 @@ class Gemini(ChatClient[GenaiClient]):
         )
 
     def add_assistant_message(
-        self, messages: list[Any], message: StreamResponse | str
+        self, messages: list[Any], message: ChatResponse | str
     ) -> None:
         if isinstance(message, str):
             messages.append(
@@ -221,7 +219,7 @@ class Gemini(ChatClient[GenaiClient]):
 
         return params
 
-    def chat(self, messages: list[Any], **kwargs: Unpack[ChatParams]) -> StreamResponse:
+    def chat(self, messages: list[Any], **kwargs: Unpack[ChatParams]) -> ChatResponse:
         params = self._build_params(messages, **kwargs)
 
         response = self.client.interactions.create(**params)
@@ -231,7 +229,7 @@ class Gemini(ChatClient[GenaiClient]):
         if usage:
             self.record_usage(usage)
 
-        return StreamResponse(
+        return ChatResponse(
             text=self._text_from_message(response),
             stop_reason="tool_use" if tool_calls else getattr(response, "status", ""),
             tool_calls=tool_calls,

@@ -1,6 +1,6 @@
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-import re
 from typing import Any, Generic, Iterator, Protocol, Self, TypedDict, TypeVar, Unpack
 
 from token_tracker import TokenTracker
@@ -22,7 +22,7 @@ class StreamChunk:
 
 
 @dataclass
-class StreamResponse:
+class ChatResponse:
     text: str = ""
     stop_reason: str = ""
     tool_calls: list[Any] = field(default_factory=list)
@@ -40,7 +40,7 @@ class MessageStream(Protocol):
     def __exit__(self, *args: Any) -> None: ...
     def __iter__(self) -> Iterator[StreamChunk]: ...
     def __next__(self) -> StreamChunk: ...
-    def get_final_message(self) -> StreamResponse: ...
+    def get_final_message(self) -> ChatResponse: ...
 
 
 class ChatParams(TypedDict, total=False):
@@ -70,7 +70,7 @@ class ChatClient(ABC, Generic[T]):
         messages.append({"role": "user", "content": content})
 
     def add_assistant_message(
-        self, messages: list[Any], message: StreamResponse | str
+        self, messages: list[Any], message: ChatResponse | str
     ) -> None:
         if isinstance(message, str):
             content: Any = message
@@ -90,14 +90,14 @@ class ChatClient(ABC, Generic[T]):
 
     def chat_json(
         self, messages: list[Any], **kwargs: Unpack[ChatParams]
-    ) -> StreamResponse:
+    ) -> ChatResponse:
         response = self.chat(messages, **kwargs)
         response.text = re.sub(r"^```(?:json)?\s*|\s*```$", "", response.text.strip())
 
         return response
 
     @abstractmethod
-    def chat(self, messages: list[Any], **kwargs: Unpack[ChatParams]) -> StreamResponse:
+    def chat(self, messages: list[Any], **kwargs: Unpack[ChatParams]) -> ChatResponse:
         pass
 
     @abstractmethod

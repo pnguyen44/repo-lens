@@ -1,6 +1,6 @@
 from typing import Any, Unpack
 
-from chat_client import ChatClient, ChatParams, MessageStream, StreamResponse
+from chat_client import ChatClient, ChatParams, ChatResponse, MessageStream
 
 model = "test-model"
 
@@ -23,8 +23,8 @@ class FakeStream:
 
 
 class FakeChatClient(ChatClient[None]):
-    def chat(self, messages: list[Any], **kwargs: Unpack[ChatParams]) -> StreamResponse:
-        return StreamResponse(text="fake response")
+    def chat(self, messages: list[Any], **kwargs: Unpack[ChatParams]) -> ChatResponse:
+        return ChatResponse(text="fake response")
 
     def chat_stream(
         self, messages: list[Any], **kwargs: Unpack[ChatParams]

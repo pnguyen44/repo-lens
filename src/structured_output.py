@@ -1,13 +1,15 @@
 from typing import Any, TypeVar
-from chat_client import ChatClient, StreamResponse
+
 from pydantic import BaseModel, ValidationError
+
+from chat_client import ChatClient, ChatResponse
 
 T = TypeVar("T", bound=BaseModel)
 
 
 def parse_with_retry(
     chat_client: ChatClient[Any],
-    response: StreamResponse,
+    response: ChatResponse,
     messages: list[Any],
     model_type: type[T],
     max_retries: int = 3,

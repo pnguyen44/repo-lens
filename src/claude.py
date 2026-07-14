@@ -7,9 +7,9 @@ from anthropic.types import Message, Usage
 from chat_client import (
     ChatClient,
     ChatParams,
+    ChatResponse,
     MessageStream,
     StreamChunk,
-    StreamResponse,
     ToolCall,
 )
 from token_tracker import UsagePayload
@@ -59,7 +59,7 @@ class ClaudeStream:
                 self._in_tool_block = False
                 return StreamChunk(type="tool_stop")
 
-    def get_final_message(self) -> StreamResponse:
+    def get_final_message(self) -> ChatResponse:
         message = self._message_stream.get_final_message()
         self._response = message
 
@@ -70,7 +70,7 @@ class ClaudeStream:
             if b.type == "tool_use"
         ]
 
-        return StreamResponse(
+        return ChatResponse(
             text="".join(self._text_parts),
             stop_reason=stop_reason,
             tool_calls=tool_calls,
@@ -203,19 +203,19 @@ class Claude(ChatClient[Anthropic]):
 
     def chat_json(
         self, messages: list[Any], **kwargs: Unpack[ChatParams]
-    ) -> StreamResponse:
+    ) -> ChatResponse:
         self.add_assistant_message(messages=messages, message="```json")
         kwargs["stop_sequences"] = ["```"]
         return self.chat(messages=messages, **kwargs)
 
-    def chat(self, messages: list[Any], **kwargs: Unpack[ChatParams]) -> StreamResponse:
+    def chat(self, messages: list[Any], **kwargs: Unpack[ChatParams]) -> ChatResponse:
         params = self._build_params(messages=messages, **kwargs)
 
         response = self.client.messages.create(**params)
 
         self.record_usage(response.usage)
 
-        return StreamResponse(
+        return ChatResponse(
             text=self._text_from_message(response),
             stop_reason=response.stop_reason or "end_turn",
             tool_calls=[b for b in response.content if b.type == "tool_use"],
