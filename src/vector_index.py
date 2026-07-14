@@ -1,7 +1,7 @@
-from typing import Any, Callable, Optional
 import math
-
 from enum import Enum
+from typing import Any, Callable
+
 from base_vector_index import BaseVectorIndex
 
 
@@ -19,7 +19,7 @@ class VectorIndex(BaseVectorIndex):
         super().__init__(embedding_fn=embedding_fn)
         self.vectors: list[list[float]] = []
         self.documents: list[dict[str, Any]] = []
-        self._vector_dim: Optional[int] = None
+        self._vector_dim: int | None = None
 
         self._distance_functions = {
             DistanceMetric.COSINE: self._cosine_distance,

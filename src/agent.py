@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 
 from chat import Chat
 from chat_client import ChatClient
@@ -14,9 +14,10 @@ class AgentName(Enum):
 
 
 class Agent:
-    def __init__(self, name: AgentName, chat: Chat) -> None:
+    def __init__(self, *, name: AgentName, chat: Chat, description: str) -> None:
         self.name = name
         self.chat = chat
+        self.description = description
 
     async def run(self, task: str) -> str:
         self.chat.messages = []
@@ -31,13 +32,17 @@ def create_github_agent(chat_client: ChatClient[Any], github_mcp: MCPClient) -> 
         web_search=False,
     )
 
-    return Agent(name=AgentName.GITHUB, chat=chat)
+    return Agent(
+        name=AgentName.GITHUB,
+        chat=chat,
+        description="Answers questions about GitHub repositories (PRs, issues, files, commits).",
+    )
 
 
 def create_rag_agent(
     chat_client: ChatClient[Any],
     hybrid_retriever: HybridRetriever,
-    reranker: Optional[Reranker] = None,
+    reranker: Reranker | None = None,
 ) -> Agent:
     chat = Chat(
         chat_client=chat_client,
@@ -47,4 +52,8 @@ def create_rag_agent(
         web_search=False,
     )
 
-    return Agent(name=AgentName.RAG, chat=chat)
+    return Agent(
+        name=AgentName.RAG,
+        chat=chat,
+        description="Answers questions about indexed codebases using retrieved context.",
+    )

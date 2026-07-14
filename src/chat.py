@@ -1,16 +1,17 @@
 import asyncio
 import logging
 import time
-from typing import Any, Optional
 from enum import Enum
+from typing import Any
+
+from anthropic import AuthenticationError, BadRequestError, RateLimitError
 
 from chat_client import ChatClient, StreamError
 from embeddings import Embedder
 from hybrid_retriever import HybridRetriever
 from mcp_client import MCPClient
-from tool_manager import ToolManager
-from anthropic import AuthenticationError, BadRequestError, RateLimitError
 from reranker import Reranker
+from tool_manager import ToolManager
 from trace_context import start_query_trace
 
 logger = logging.getLogger(__name__)
@@ -31,10 +32,10 @@ class Chat:
         *,
         mcp_clients: dict[str, MCPClient] | None = None,
         system_prompt: str | None = None,
-        embedder: Optional[Embedder] = None,
-        hybrid_retriever: Optional[HybridRetriever] = None,
+        embedder: Embedder | None = None,
+        hybrid_retriever: HybridRetriever | None = None,
         web_search: bool = True,
-        reranker: Optional[Reranker] = None,
+        reranker: Reranker | None = None,
     ) -> None:
         self.chat_client = chat_client
         self.mcp_clients = mcp_clients or {}

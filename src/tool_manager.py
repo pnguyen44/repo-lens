@@ -1,9 +1,11 @@
 import json
 import logging
-from mcp_client import MCPClient
+from typing import Any, Literal
+
 from mcp.types import CallToolResult, TextContent
-from typing import Any, Optional, Literal
+
 from chat_client import ToolCall
+from mcp_client import MCPClient
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +29,7 @@ class ToolManager:
     @classmethod
     async def _find_client_with_tool(
         cls, clients: list[MCPClient], tool_name: str
-    ) -> Optional[MCPClient]:
+    ) -> MCPClient | None:
         for client in clients:
             tools = await client.list_tools()
             tool = next((t for t in tools if t.name == tool_name), None)

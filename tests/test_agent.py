@@ -43,7 +43,7 @@ async def test_agent_run_clears_messages_and_delegates() -> None:
     mock_chat.run = AsyncMock(return_value="answer")
     mock_chat.messages = [{"role": "user", "content": "old message"}]
 
-    agent = Agent(name=AgentName.GITHUB, chat=mock_chat)
+    agent = Agent(name=AgentName.GITHUB, chat=mock_chat, description="test agent")
     result = await agent.run("some task")
 
     assert mock_chat.messages == []

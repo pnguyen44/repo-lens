@@ -1,7 +1,7 @@
 import math
 import re
 from collections import Counter
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 from hybrid_retriever import validate_document
 
@@ -11,7 +11,7 @@ class BM25Index:
         self,
         k1: float = 1.5,
         b: float = 0.75,
-        tokenizer: Optional[Callable[[str], list[str]]] = None,
+        tokenizer: Callable[[str], list[str]] | None = None,
     ) -> None:
         self.documents: list[dict[str, Any]] = []
         self._tokenized_docs: list[list[str]] = []
