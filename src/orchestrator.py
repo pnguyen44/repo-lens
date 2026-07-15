@@ -1,8 +1,11 @@
 import copy
+import logging
 from typing import Any
 
 from agent import Agent, AgentName
 from chat_client import ChatClient
+
+logger = logging.getLogger(__name__)
 
 delegate_to_agent_schema = {
     "name": "delegate_to_agent",
@@ -98,11 +101,14 @@ class Orchestrator:
                 if not agent:
                     break
 
+                print(f"\n[Delegating to {agent_name}]: {task}")
+                logger.info("Delegating to %s: %s", agent_name, task)
                 result = await agent.run(task)
 
                 tool_result = {
                     "tool_use_id": tool.id,
                     "type": "tool_result",
+                    "name": tool.name,
                     "content": result,
                 }
 

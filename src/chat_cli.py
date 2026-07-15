@@ -1,60 +1,30 @@
+import asyncio
 import logging
 import os
 from contextlib import AsyncExitStack
 from typing import Any
 
-from config import create_config
 from rich import print
-from document_indexer import DocumentIndexer
-from indexer import fetch_repo_chunks
-from mcp_client import MCPClient, create_github_client
-import asyncio
-from chat import Chat
-from chat_client import ChatClient
 from voyageai.client import Client as VoyageClient
-from embeddings import VoyageEmbedder, InputType
-from reranker import VoyageReranker
-from bm25_index import BM25Index
-from hybrid_retriever import HybridRetriever
-from provider import create_chat_client
-from chroma_index import ChromaVectorIndex
-from logging_config import configure_logging
 
+from agent import AgentName, create_github_agent, create_rag_agent
+from bm25_index import BM25Index
+from chat_client import ChatClient
+from chroma_index import ChromaVectorIndex
+from config import Config, create_config
+from document_indexer import DocumentIndexer
+from embeddings import InputType, VoyageEmbedder
+from hybrid_retriever import HybridRetriever
+from indexer import fetch_repo_chunks
+from logging_config import configure_logging
+from mcp_client import MCPClient, create_github_client
+from orchestrator import Orchestrator
+from provider import create_chat_client
+from reranker import VoyageReranker
 
 CHROMA_COLLECTION_NAME = "repo_chunks"
 
 logger = logging.getLogger(__name__)
-
-
-SYSTEM_PROMPT = """You are repo-lens, a GitHub repository assistant.
-{org_context}
-When the user asks about PRs, issues, or repos across the org, use the search tool
-(e.g., "is:pr is:open org:<org>") instead of listing repos individually.
-When listing issues or PRs, include number, title, status, and assignee.
-When answering using context from <source> tags, cite the repo and section in your response.
-Be concise.
-
-If the context says no relevant information was found, you MUST immediately search the repository
-using available tools before responding. Never ask the user whether to search. Only say you don't
-have enough information after tools also return nothing useful.
-
-"""
-
-
-def build_system_prompt(default_org: str | None) -> str:
-    if default_org:
-        org_context = (
-            f"The default GitHub organization is {default_org}. "
-            f"When a user mentions a repo without specifying the owner, "
-            f"assume the owner is {default_org} (e.g., {default_org}/repo-name). "
-            f"If the user does not specify a repo name, ask them to clarify."
-        )
-    else:
-        org_context = (
-            "When a user asks about a repo without specifying the owner, "
-            "ask them to clarify the organization."
-        )
-    return SYSTEM_PROMPT.format(org_context=org_context)
 
 
 async def validate_repo(github_mcp: MCPClient, owner: str, repo: str) -> bool:
@@ -93,12 +63,12 @@ async def ensure_indexed(
 
 
 async def chat_loop(
-    chat: Chat,
     github_mcp: MCPClient,
     owner: str,
     repo: str,
     document_indexer: DocumentIndexer,
-    client: ChatClient[Any],
+    orchestrator: Orchestrator,
+    chat_client: ChatClient[Any],
 ) -> None:
     try:
         while True:
@@ -116,11 +86,49 @@ async def chat_loop(
                 document_indexer.reindex(key="repo", value=repo_key, documents=docs)
                 print(f"Re-indexed {repo_key} successfully.")
                 continue
-            await chat.run(user_input)
+            result = await orchestrator.run(user_input)
+            print(result)
     except KeyboardInterrupt:
         print("\nexiting")
     finally:
-        print(client.token_tracker.summary())
+        print(chat_client.token_tracker.summary())
+
+
+def create_retriever_stack(config: Config) -> tuple[ChromaVectorIndex, HybridRetriever]:
+    embedder = VoyageEmbedder(VoyageClient(), model=config.voyage_embed_model)
+
+    vector_index = ChromaVectorIndex(
+        collection_name=CHROMA_COLLECTION_NAME,
+        embedding_fn=lambda texts: embedder.generate_embeddings(
+            texts, input_type=InputType.DOCUMENT
+        ),
+        host=config.chroma_host,
+        port=config.chroma_port,
+    )
+    bm25 = BM25Index()
+
+    retriever = HybridRetriever(vector_index, bm25)
+
+    return vector_index, retriever
+
+
+def create_orchestrator(
+    config: Config,
+    chat_client: ChatClient[Any],
+    retriever: HybridRetriever,
+    github_mcp: MCPClient,
+) -> Orchestrator:
+    reranker = VoyageReranker(client=VoyageClient(), model=config.voyage_rerank_model)
+
+    github_agent = create_github_agent(chat_client=chat_client, github_mcp=github_mcp)
+    rag_agent = create_rag_agent(
+        chat_client=chat_client, hybrid_retriever=retriever, reranker=reranker
+    )
+
+    return Orchestrator(
+        agents={AgentName.GITHUB: github_agent, AgentName.RAG: rag_agent},
+        chat_client=chat_client,
+    )
 
 
 async def main() -> None:
@@ -135,29 +143,12 @@ async def main() -> None:
         )
 
         owner = config.default_org or input("> GITHUB org: ")
-
-        client = create_chat_client(config=config)
-
-        embedder = VoyageEmbedder(VoyageClient(), model=config.voyage_embed_model)
-
-        vector_index = ChromaVectorIndex(
-            collection_name=CHROMA_COLLECTION_NAME,
-            embedding_fn=lambda texts: embedder.generate_embeddings(
-                texts, input_type=InputType.DOCUMENT
-            ),
-            host=config.chroma_host,
-            port=config.chroma_port,
-        )
-        bm25 = BM25Index()
-
-        retriever = HybridRetriever(vector_index, bm25)
-
+        vector_index, retriever = create_retriever_stack(config)
         document_indexer = DocumentIndexer(
             vector_index=vector_index, retriever=retriever
         )
 
         count = document_indexer.load_from_store()
-
         if count > 0:
             logger.info("Loaded %d chunks from persistent storage.", count)
 
@@ -167,26 +158,22 @@ async def main() -> None:
 
         print(f"Chatting about {owner}/{repo}")
 
-        reranker = VoyageReranker(
-            client=VoyageClient(), model=config.voyage_rerank_model
-        )
+        chat_client = create_chat_client(config=config)
 
-        chat = Chat(
-            chat_client=client,
-            mcp_clients={"github": github_mcp},
-            system_prompt=build_system_prompt(config.default_org),
-            embedder=embedder,
-            hybrid_retriever=retriever,
-            reranker=reranker,
+        orchestrator = create_orchestrator(
+            config=config,
+            chat_client=chat_client,
+            retriever=retriever,
+            github_mcp=github_mcp,
         )
 
         await chat_loop(
-            chat=chat,
             github_mcp=github_mcp,
             owner=owner,
             repo=repo,
             document_indexer=document_indexer,
-            client=client,
+            orchestrator=orchestrator,
+            chat_client=chat_client,
         )
 
 
@@ -196,4 +183,4 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         pass
     except Exception as e:
-        logger.error("Unexpected error: %s", e)
+        logger.exception("Unexpected error: %s", e)
