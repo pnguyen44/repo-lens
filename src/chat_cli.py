@@ -27,6 +27,10 @@ CHROMA_COLLECTION_NAME = "repo_chunks"
 logger = logging.getLogger(__name__)
 
 
+def print_status(label: str, message: str) -> None:
+    print(f"\n[bold cyan]{label}:[/bold cyan] {message}")
+
+
 async def validate_repo(github_mcp: MCPClient, owner: str, repo: str) -> bool:
     try:
         result = await github_mcp.call_tool(
@@ -63,7 +67,7 @@ async def ensure_indexed(
 
 
 async def cli_on_delegate(agent_name: str, task: str) -> None:
-    print(f"\n[Delegating to {agent_name}]: {task}")
+    print_status(label=f"Delegating to {agent_name}", message=task)
 
 
 async def chat_loop(
@@ -81,20 +85,20 @@ async def chat_loop(
                 break
             if user_input.lower() == "/reindex":
                 repo_key = f"{owner}/{repo}"
-                print(f"Re-indexing {repo_key}...")
+                print_status(label="Re-indexing", message=repo_key)
                 docs = await fetch_repo_chunks(
                     github_mcp=github_mcp,
                     owner=owner,
                     repo=repo,
                 )
                 document_indexer.reindex(key="repo", value=repo_key, documents=docs)
-                print(f"Re-indexed {repo_key} successfully.")
+                print_status(label="Re-indexed", message=repo_key)
                 continue
             await orchestrator.run(query=user_input, on_delegate=cli_on_delegate)
     except KeyboardInterrupt:
         print("\nexiting")
     finally:
-        print(chat_client.token_tracker.summary())
+        print_status(label="Tokens", message=str(chat_client.token_tracker.summary()))
 
 
 def create_retriever_stack(config: Config) -> tuple[ChromaVectorIndex, HybridRetriever]:
@@ -138,7 +142,7 @@ async def main() -> None:
     configure_logging(os.getenv("LOG_LEVEL", "INFO"))
     config = create_config()
 
-    print(f"Chatting with provider: {config.provider}, model: {config.model}")
+    print_status(label="Provider", message=f"{config.provider}, model: {config.model}")
 
     async with AsyncExitStack() as stack:
         github_mcp = await stack.enter_async_context(
@@ -159,7 +163,7 @@ async def main() -> None:
             github_mcp=github_mcp, owner=owner, document_indexer=document_indexer
         )
 
-        print(f"Chatting about {owner}/{repo}")
+        print_status(label="Chatting about", message=f"{owner}/{repo}")
 
         chat_client = create_chat_client(config=config)
 
