@@ -5,6 +5,7 @@ description = "AI-powered CLI for chatting about GitHub conversations"
 requires-python = ">=3.11"
 dependencies = [
     "anthropic>=0.104.1",
+    "chainlit>=2.11.1",
     "chromadb",
     "google-genai>=2.3.0",
     "mcp>=1.27.1",
@@ -16,7 +17,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "mypy"]
+dev = ["pytest", "pytest-asyncio", "mypy"]
 
 [build-system]
 requires = ["hatchling"]
@@ -27,6 +28,7 @@ packages = ["src"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
+asyncio_mode = "auto"
 
 [tool.pyright]
 venvPath = "."

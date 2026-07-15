@@ -1,6 +1,6 @@
 import copy
 import logging
-from typing import Any
+from typing import Any, Protocol
 
 from agent import Agent, AgentName
 from chat_client import ChatClient
@@ -40,6 +40,10 @@ Rules:
 """
 
 
+class OnDelegateCallback(Protocol):
+    async def __call__(self, agent_name: str, task: str) -> None: ...
+
+
 class Orchestrator:
     def __init__(
         self,
@@ -66,7 +70,9 @@ class Orchestrator:
             agents="\n".join(agent_lines)
         )
 
-    async def run(self, query: str) -> str:
+    async def run(
+        self, query: str, on_delegate: OnDelegateCallback | None = None
+    ) -> str:
         self.chat_client.add_user_message(messages=self.messages, content=query)
 
         delegations = 0
@@ -101,8 +107,10 @@ class Orchestrator:
                 if not agent:
                     break
 
-                print(f"\n[Delegating to {agent_name}]: {task}")
                 logger.info("Delegating to %s: %s", agent_name, task)
+                if on_delegate:
+                    await on_delegate(agent_name=agent_name, task=task)
+
                 result = await agent.run(task)
 
                 tool_result = {

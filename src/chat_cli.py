@@ -62,6 +62,10 @@ async def ensure_indexed(
     return repo
 
 
+async def cli_on_delegate(agent_name: str, task: str) -> None:
+    print(f"\n[Delegating to {agent_name}]: {task}")
+
+
 async def chat_loop(
     github_mcp: MCPClient,
     owner: str,
@@ -86,8 +90,7 @@ async def chat_loop(
                 document_indexer.reindex(key="repo", value=repo_key, documents=docs)
                 print(f"Re-indexed {repo_key} successfully.")
                 continue
-            result = await orchestrator.run(user_input)
-            print(result)
+            await orchestrator.run(query=user_input, on_delegate=cli_on_delegate)
     except KeyboardInterrupt:
         print("\nexiting")
     finally:
