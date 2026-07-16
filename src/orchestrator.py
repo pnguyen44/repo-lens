@@ -44,6 +44,10 @@ class OnDelegateCallback(Protocol):
     async def __call__(self, agent_name: str, task: str) -> None: ...
 
 
+class OnTextCallback(Protocol):
+    def __call__(self, text: str) -> None: ...
+
+
 class Orchestrator:
     def __init__(
         self,
@@ -70,32 +74,44 @@ class Orchestrator:
             agents="\n".join(agent_lines)
         )
 
+    def _stream(self, on_text: OnTextCallback | None = None) -> tuple[Any, str]:
+        text = ""
+        with self.chat_client.chat_stream(
+            messages=self.messages,
+            tools=self.tools,
+            system=self.system_prompt,
+            web_search=False,
+        ) as stream:
+            for chunk in stream:
+                if chunk.type == "text":
+                    text += chunk.text
+                    if on_text:
+                        on_text(chunk.text)
+            response = stream.get_final_message()
+        self.chat_client.add_assistant_message(messages=self.messages, message=response)
+
+        return response, text
+
     async def run(
-        self, query: str, on_delegate: OnDelegateCallback | None = None
+        self,
+        query: str,
+        on_delegate: OnDelegateCallback | None = None,
+        on_text: OnTextCallback | None = None,
     ) -> str:
         self.chat_client.add_user_message(messages=self.messages, content=query)
 
         delegations = 0
 
         while True:
-            response = self.chat_client.chat(
-                messages=self.messages,
-                tools=self.tools,
-                system=self.system_prompt,
-                web_search=False,
-            )
-
-            self.chat_client.add_assistant_message(
-                messages=self.messages, message=response
-            )
+            response, text = self._stream(on_text=on_text)
 
             if response.stop_reason != "tool_use":
-                return response.text
+                return text
 
             for tool in response.tool_calls:
                 delegations += 1
                 if delegations > self.max_delegations:
-                    return response.text
+                    return text
 
                 agent_name = tool.input["agent_name"]
                 task = tool.input["task"]

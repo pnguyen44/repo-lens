@@ -94,7 +94,12 @@ async def chat_loop(
                 document_indexer.reindex(key="repo", value=repo_key, documents=docs)
                 print_status(label="Re-indexed", message=repo_key)
                 continue
-            await orchestrator.run(query=user_input, on_delegate=cli_on_delegate)
+            await orchestrator.run(
+                query=user_input,
+                on_delegate=cli_on_delegate,
+                on_text=lambda t: print(t, end="", flush=True),
+            )
+            print()
     except KeyboardInterrupt:
         print("\nexiting")
     finally:

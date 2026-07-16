@@ -97,14 +97,17 @@ class GeminiStream:
                             self._text_parts.append(chunk.delta.text)
                             return StreamChunk(type="text", text=chunk.delta.text)
 
-                        case "arguments":
+                        case "arguments" | "arguments_delta":
+                            partial = (
+                                getattr(chunk.delta, "partial_arguments", None)
+                                or getattr(chunk.delta, "arguments", None)
+                                or ""
+                            )
                             if chunk.index in self._pending_calls:
-                                self._pending_calls[chunk.index]["arguments"] += (
-                                    chunk.delta.partial_arguments
-                                )
+                                self._pending_calls[chunk.index]["arguments"] += partial
                             return StreamChunk(
                                 type="tool_input",
-                                partial_json=chunk.delta.partial_arguments,
+                                partial_json=partial,
                             )
 
                 case "step.stop":
