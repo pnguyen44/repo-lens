@@ -178,7 +178,7 @@ class Gemini(ChatClient[GenaiClient]):
                         "type": "function_result",
                         "name": result["name"],
                         "call_id": result["tool_use_id"],
-                        "result": [{"type": "text", "text": result["content"]}],
+                        "result": result["content"],
                     }
                 )
             return
