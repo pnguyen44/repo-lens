@@ -1,10 +1,10 @@
 from enum import Enum
 from typing import Any
 
-from repo_lens.agents.chat import Chat
+from repo_lens.agents.chat import Chat, OnToolInputCallback, OnToolStartCallback
+from repo_lens.core.mcp_client import MCPClient
 from repo_lens.providers.chat_client import ChatClient
 from repo_lens.rag.hybrid_retriever import HybridRetriever
-from repo_lens.core.mcp_client import MCPClient
 from repo_lens.rag.reranker import Reranker
 
 
@@ -19,9 +19,17 @@ class Agent:
         self.chat = chat
         self.description = description
 
-    async def run(self, task: str) -> str:
+    async def run(
+        self,
+        task: str,
+        *,
+        on_tool_start: OnToolStartCallback | None = None,
+        on_tool_input: OnToolInputCallback | None = None,
+    ) -> str:
         self.chat.messages = []
-        return await self.chat.run(task)
+        return await self.chat.run(
+            query=task, on_tool_start=on_tool_start, on_tool_input=on_tool_input
+        )
 
 
 def create_github_agent(chat_client: ChatClient[Any], github_mcp: MCPClient) -> Agent:

@@ -3,6 +3,7 @@ import logging
 from typing import Any, Protocol
 
 from repo_lens.agents.agent import Agent, AgentName
+from repo_lens.agents.chat import OnToolInputCallback, OnToolStartCallback
 from repo_lens.providers.chat_client import ChatClient
 
 logger = logging.getLogger(__name__)
@@ -97,6 +98,8 @@ class Orchestrator:
         query: str,
         on_delegate: OnDelegateCallback | None = None,
         on_text: OnTextCallback | None = None,
+        on_tool_start: OnToolStartCallback | None = None,
+        on_tool_input: OnToolInputCallback | None = None,
     ) -> str:
         self.chat_client.add_user_message(messages=self.messages, content=query)
 
@@ -127,7 +130,11 @@ class Orchestrator:
                 if on_delegate:
                     await on_delegate(agent_name=agent_name, task=task)
 
-                result = await agent.run(task)
+                result = await agent.run(
+                    task,
+                    on_tool_start=on_tool_start,
+                    on_tool_input=on_tool_input,
+                )
 
                 tool_result = {
                     "tool_use_id": tool.id,

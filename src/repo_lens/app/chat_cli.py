@@ -87,6 +87,14 @@ async def cli_on_delegate(agent_name: str, task: str) -> None:
     print_status(label=f"Delegating to {agent_name}", message=task)
 
 
+def cli_on_tool_start(tool_name: str) -> None:
+    print_status(label="Tool Call", message=tool_name)
+
+
+def cli_on_tool_input(partial_json: str) -> None:
+    print(partial_json, end="", flush=True)
+
+
 async def chat_loop(
     github_mcp: MCPClient,
     owner: str,
@@ -115,6 +123,8 @@ async def chat_loop(
                 query=user_input,
                 on_delegate=cli_on_delegate,
                 on_text=lambda t: print(t, end="", flush=True),
+                on_tool_start=cli_on_tool_start,
+                on_tool_input=cli_on_tool_input,
             )
             print()
     except KeyboardInterrupt:

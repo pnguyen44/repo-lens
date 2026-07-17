@@ -53,4 +53,6 @@ async def test_agent_run_clears_messages_and_delegates() -> None:
 
     assert mock_chat.messages == []
     assert result == "answer"
-    mock_chat.run.assert_called_once_with("some task")
+    mock_chat.run.assert_called_once_with(
+        query="some task", on_tool_start=None, on_tool_input=None
+    )

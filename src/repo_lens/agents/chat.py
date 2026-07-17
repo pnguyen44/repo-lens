@@ -2,21 +2,29 @@ import asyncio
 import logging
 import time
 from enum import Enum
-from typing import Any
+from typing import Any, Protocol
 
 from anthropic import AuthenticationError, BadRequestError, RateLimitError
 
+from repo_lens.agents.tool_manager import ToolManager
+from repo_lens.core.mcp_client import MCPClient
+from repo_lens.core.trace_context import start_query_trace
 from repo_lens.providers.chat_client import ChatClient, StreamError
 from repo_lens.rag.embeddings import Embedder
 from repo_lens.rag.hybrid_retriever import HybridRetriever
-from repo_lens.core.mcp_client import MCPClient
 from repo_lens.rag.reranker import Reranker
-from repo_lens.agents.tool_manager import ToolManager
-from repo_lens.core.trace_context import start_query_trace
 
 logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 3
+
+
+class OnToolStartCallback(Protocol):
+    def __call__(self, tool_name: str) -> None: ...
+
+
+class OnToolInputCallback(Protocol):
+    def __call__(self, partial_json: str) -> None: ...
 
 
 class RunStatus(Enum):
@@ -95,7 +103,10 @@ class Chat:
         self.chat_client.add_user_message(self.messages, augmented_query)
 
     def _stream_and_log(
-        self, tool_choice: dict[str, Any] | None = None
+        self,
+        tool_choice: dict[str, Any] | None = None,
+        on_tool_start: OnToolStartCallback | None = None,
+        on_tool_input: OnToolInputCallback | None = None,
     ) -> tuple[Any, str]:
         call_start = time.perf_counter()
         text = ""
@@ -111,11 +122,14 @@ class Chat:
                     print(chunk.text, end="")
                     text += chunk.text
                 elif chunk.type == "tool_start":
-                    print(f'\nTool Call: "{chunk.tool_name}"')
+                    if on_tool_start:
+                        on_tool_start(chunk.tool_name)
                 elif chunk.type == "tool_input":
-                    print(chunk.partial_json, end="")
+                    if on_tool_input:
+                        on_tool_input(chunk.partial_json)
                 elif chunk.type == "tool_stop":
-                    print()
+                    if on_tool_input:
+                        print()
 
             response = stream.get_final_message()
 
@@ -181,7 +195,13 @@ class Chat:
             content=tool_result_parts,
         )
 
-    async def run(self, query: str, tool_choice: dict[str, Any] | None = None) -> str:
+    async def run(
+        self,
+        query: str,
+        tool_choice: dict[str, Any] | None = None,
+        on_tool_start: OnToolStartCallback | None = None,
+        on_tool_input: OnToolInputCallback | None = None,
+    ) -> str:
         start_query_trace()
         start_query = time.perf_counter()
         final_text_response = ""
@@ -191,7 +211,11 @@ class Chat:
         retries = 0
         while True:
             try:
-                response, text = self._stream_and_log(tool_choice)
+                response, text = self._stream_and_log(
+                    tool_choice=tool_choice,
+                    on_tool_start=on_tool_start,
+                    on_tool_input=on_tool_input,
+                )
                 final_text_response += text
 
                 status = self._process_response(response)
