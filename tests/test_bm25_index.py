@@ -1,5 +1,5 @@
 import pytest
-from bm25_index import BM25Index
+from repo_lens.rag.bm25_index import BM25Index
 
 DOCS = [
     {"content": "Python is a popular programming language for data science"},

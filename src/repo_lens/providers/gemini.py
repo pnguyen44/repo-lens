@@ -4,7 +4,7 @@ from typing import Any, Iterator, Unpack
 
 from google.genai import Client as GenaiClient
 
-from chat_client import (
+from repo_lens.providers.chat_client import (
     ChatClient,
     ChatParams,
     ChatResponse,
@@ -13,7 +13,7 @@ from chat_client import (
     StreamError,
     ToolCall,
 )
-from token_tracker import UsagePayload
+from repo_lens.providers.token_tracker import UsagePayload
 
 logger = logging.getLogger(__name__)
 

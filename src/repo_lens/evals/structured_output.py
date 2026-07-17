@@ -2,7 +2,7 @@ from typing import Any, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
-from chat_client import ChatClient, ChatResponse
+from repo_lens.providers.chat_client import ChatClient, ChatResponse
 
 T = TypeVar("T", bound=BaseModel)
 

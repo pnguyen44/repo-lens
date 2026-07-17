@@ -4,7 +4,7 @@ from typing import Protocol, cast
 from voyageai.client import Client as VoyageClient
 from voyageai.object.reranking import RerankingResult
 
-from voyage import voyage_retry
+from repo_lens.rag.voyage import voyage_retry
 
 logger = logging.getLogger(__name__)
 

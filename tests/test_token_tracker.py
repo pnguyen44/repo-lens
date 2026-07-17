@@ -1,4 +1,4 @@
-from token_tracker import TokenTracker
+from repo_lens.providers.token_tracker import TokenTracker
 
 
 def test_record_once_no_cache() -> None:

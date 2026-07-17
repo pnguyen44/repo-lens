@@ -34,10 +34,10 @@ lint:
 	pre-commit run --all-files
 
 prompt-eval:
-	uv run src/prompt_eval.py "$(PROMPT)"
+	uv run python -m repo_lens.evals.prompt_eval "$(PROMPT)"
 
 rag-eval:
-	uv run src/rag_eval.py
+	uv run python -m repo_lens.evals.rag_eval
 
 index:
-	uv run src/indexer.py
+	uv run python -m repo_lens.rag.indexer

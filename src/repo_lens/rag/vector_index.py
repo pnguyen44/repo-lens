@@ -2,7 +2,7 @@ import math
 from enum import Enum
 from typing import Any, Callable
 
-from base_vector_index import BaseVectorIndex
+from repo_lens.rag.base_vector_index import BaseVectorIndex
 
 
 class DistanceMetric(Enum):

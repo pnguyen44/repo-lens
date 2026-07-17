@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 from typing import Any
 
-from gemini import GeminiStream
+from repo_lens.providers.gemini import GeminiStream
 
 
 def _event(event_type: str, **kwargs: Any) -> SimpleNamespace:

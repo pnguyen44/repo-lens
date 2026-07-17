@@ -6,13 +6,13 @@ from typing import Any
 
 from anthropic import AuthenticationError, BadRequestError, RateLimitError
 
-from chat_client import ChatClient, StreamError
-from embeddings import Embedder
-from hybrid_retriever import HybridRetriever
-from mcp_client import MCPClient
-from reranker import Reranker
-from tool_manager import ToolManager
-from trace_context import start_query_trace
+from repo_lens.providers.chat_client import ChatClient, StreamError
+from repo_lens.rag.embeddings import Embedder
+from repo_lens.rag.hybrid_retriever import HybridRetriever
+from repo_lens.core.mcp_client import MCPClient
+from repo_lens.rag.reranker import Reranker
+from repo_lens.agents.tool_manager import ToolManager
+from repo_lens.core.trace_context import start_query_trace
 
 logger = logging.getLogger(__name__)
 

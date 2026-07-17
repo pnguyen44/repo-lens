@@ -3,11 +3,11 @@ import logging
 import sys
 from typing import Any
 from pydantic import TypeAdapter, ValidationError
-from chat_client import ChatClient
-from config import create_config
-from models import GradeResult, TestCase
-from provider import create_chat_client
-from structured_output import parse_with_retry
+from repo_lens.providers.chat_client import ChatClient
+from repo_lens.core.config import create_config
+from repo_lens.evals.models import GradeResult, TestCase
+from repo_lens.providers.provider import create_chat_client
+from repo_lens.evals.structured_output import parse_with_retry
 
 logger = logging.getLogger(__name__)
 

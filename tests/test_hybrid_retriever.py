@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock
 import pytest
-from hybrid_retriever import HybridRetriever
+from repo_lens.rag.hybrid_retriever import HybridRetriever
 
 
 class TestInit:

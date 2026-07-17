@@ -2,7 +2,7 @@ import pytest
 
 from typing import Any
 
-from chunker import chunk_by_section, chunk_by_sentence, chunk_by_size
+from repo_lens.rag.chunker import chunk_by_section, chunk_by_sentence, chunk_by_size
 
 SECTION_CASES = [
     {

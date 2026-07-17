@@ -1,5 +1,5 @@
 import structlog
-from trace_context import start_query_trace
+from repo_lens.core.trace_context import start_query_trace
 
 
 def test_start_query_trace_return_8_char_hex():

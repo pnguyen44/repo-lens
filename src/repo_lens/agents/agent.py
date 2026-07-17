@@ -1,11 +1,11 @@
 from enum import Enum
 from typing import Any
 
-from chat import Chat
-from chat_client import ChatClient
-from hybrid_retriever import HybridRetriever
-from mcp_client import MCPClient
-from reranker import Reranker
+from repo_lens.agents.chat import Chat
+from repo_lens.providers.chat_client import ChatClient
+from repo_lens.rag.hybrid_retriever import HybridRetriever
+from repo_lens.core.mcp_client import MCPClient
+from repo_lens.rag.reranker import Reranker
 
 
 class AgentName(Enum):

@@ -2,7 +2,12 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from agent import Agent, AgentName, create_github_agent, create_rag_agent
+from repo_lens.agents.agent import (
+    Agent,
+    AgentName,
+    create_github_agent,
+    create_rag_agent,
+)
 
 
 def test_create_github_agent_wires_correct_config() -> None:

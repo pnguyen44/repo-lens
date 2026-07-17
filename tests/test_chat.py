@@ -1,10 +1,10 @@
 from typing import Any
 from unittest.mock import MagicMock
-from chat import Chat
+from repo_lens.agents.chat import Chat
 import pytest
 
-from hybrid_retriever import HybridRetriever
-from vector_index import VectorIndex
+from repo_lens.rag.hybrid_retriever import HybridRetriever
+from repo_lens.rag.vector_index import VectorIndex
 
 
 def _fake_embed(texts: list[str]) -> list[list[float]]:

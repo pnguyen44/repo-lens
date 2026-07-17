@@ -3,7 +3,7 @@ from typing import Any, Callable
 
 import chromadb
 
-from base_vector_index import BaseVectorIndex
+from repo_lens.rag.base_vector_index import BaseVectorIndex
 
 
 class ChromaVectorIndex(BaseVectorIndex):

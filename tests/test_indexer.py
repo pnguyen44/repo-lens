@@ -1,10 +1,12 @@
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from bm25_index import BM25Index
-from hybrid_retriever import HybridRetriever
-from indexer import fetch_repo_chunks
-from vector_index import VectorIndex
-from unittest.mock import patch, AsyncMock, MagicMock
-from mcp_client import MCPClient
+
+from repo_lens.core.mcp_client import MCPClient
+from repo_lens.rag.bm25_index import BM25Index
+from repo_lens.rag.hybrid_retriever import HybridRetriever
+from repo_lens.rag.indexer import fetch_repo_chunks
+from repo_lens.rag.vector_index import VectorIndex
 
 
 class FakeEmbedder:
@@ -25,7 +27,9 @@ def mock_mcp_client():
         "# Title\n\n## Section One\nSome content.\n\n## Section Two\nMore content."
     )
     with patch(
-        "indexer.fetch_readme", new_callable=AsyncMock, return_value=fake_readme
+        "repo_lens.rag.indexer.fetch_readme",
+        new_callable=AsyncMock,
+        return_value=fake_readme,
     ):
         yield None
 
@@ -58,7 +62,9 @@ async def test_rag_end_to_end(mock_mcp_client, fake_embedder):
 
 @pytest.mark.asyncio
 async def test_fetch_repo_chunks_empty_readme():
-    with patch("indexer.fetch_readme", new_callable=AsyncMock, return_value=""):
+    with patch(
+        "repo_lens.rag.indexer.fetch_readme", new_callable=AsyncMock, return_value=""
+    ):
         docs = await fetch_repo_chunks(
             github_mcp=MagicMock(spec=MCPClient),
             owner="org",
@@ -77,7 +83,11 @@ async def test_fetch_repo_chunks_empty_readme():
     ids=["no-headers", "whitespace-only-section"],
 )
 async def test_fetch_repo_chunks_counts(readme, expected_chunks):
-    with patch("indexer.fetch_readme", new_callable=AsyncMock, return_value=readme):
+    with patch(
+        "repo_lens.rag.indexer.fetch_readme",
+        new_callable=AsyncMock,
+        return_value=readme,
+    ):
         docs = await fetch_repo_chunks(
             github_mcp=MagicMock(spec=MCPClient),
             owner="org",
@@ -89,7 +99,7 @@ async def test_fetch_repo_chunks_counts(readme, expected_chunks):
 @pytest.mark.asyncio
 async def test_fetch_repo_chunks_propagates_fetch_error():
     with patch(
-        "indexer.fetch_readme",
+        "repo_lens.rag.indexer.fetch_readme",
         new_callable=AsyncMock,
         side_effect=ValueError("No README context found"),
     ):

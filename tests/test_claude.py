@@ -3,8 +3,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from chat_client import ChatClient
-from claude import Claude
+from repo_lens.providers.chat_client import ChatClient
+from repo_lens.providers.claude import Claude
 
 model = "test-model"
 

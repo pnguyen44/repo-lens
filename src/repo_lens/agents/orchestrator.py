@@ -2,8 +2,8 @@ import copy
 import logging
 from typing import Any, Protocol
 
-from agent import Agent, AgentName
-from chat_client import ChatClient
+from repo_lens.agents.agent import Agent, AgentName
+from repo_lens.providers.chat_client import ChatClient
 
 logger = logging.getLogger(__name__)
 

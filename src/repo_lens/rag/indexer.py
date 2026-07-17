@@ -1,15 +1,15 @@
 import logging
 from typing import Any
-from bm25_index import BM25Index
-from embeddings import VoyageEmbedder, InputType
-from hybrid_retriever import HybridRetriever
-from mcp_client import MCPClient, create_github_client
+from repo_lens.rag.bm25_index import BM25Index
+from repo_lens.rag.embeddings import VoyageEmbedder, InputType
+from repo_lens.rag.hybrid_retriever import HybridRetriever
+from repo_lens.core.mcp_client import MCPClient, create_github_client
 import asyncio
-from config import create_config
+from repo_lens.core.config import create_config
 from mcp.types import EmbeddedResource, TextResourceContents
-from vector_index import VectorIndex
+from repo_lens.rag.vector_index import VectorIndex
 from voyageai.client import Client as VoyageClient
-from chunker import chunk_by_section
+from repo_lens.rag.chunker import chunk_by_section
 
 logger = logging.getLogger(__name__)
 

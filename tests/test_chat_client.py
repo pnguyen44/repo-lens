@@ -1,6 +1,11 @@
 from typing import Any, Unpack
 
-from chat_client import ChatClient, ChatParams, ChatResponse, MessageStream
+from repo_lens.providers.chat_client import (
+    ChatClient,
+    ChatParams,
+    ChatResponse,
+    MessageStream,
+)
 
 model = "test-model"
 

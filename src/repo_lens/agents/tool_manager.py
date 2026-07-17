@@ -4,8 +4,8 @@ from typing import Any, Literal
 
 from mcp.types import CallToolResult, TextContent
 
-from chat_client import ToolCall
-from mcp_client import MCPClient
+from repo_lens.providers.chat_client import ToolCall
+from repo_lens.core.mcp_client import MCPClient
 
 logger = logging.getLogger(__name__)
 

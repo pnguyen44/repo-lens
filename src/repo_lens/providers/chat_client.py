@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Generic, Iterator, Protocol, Self, TypedDict, TypeVar, Unpack
 
-from token_tracker import TokenTracker
+from repo_lens.providers.token_tracker import TokenTracker
 
 
 @dataclass

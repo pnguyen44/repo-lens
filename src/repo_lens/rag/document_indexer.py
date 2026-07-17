@@ -1,6 +1,6 @@
 from typing import Any
-from chroma_index import ChromaVectorIndex
-from hybrid_retriever import HybridRetriever
+from repo_lens.rag.chroma_index import ChromaVectorIndex
+from repo_lens.rag.hybrid_retriever import HybridRetriever
 
 
 class DocumentIndexer:

@@ -7,20 +7,20 @@ from typing import Any
 from rich import print
 from voyageai.client import Client as VoyageClient
 
-from agent import AgentName, create_github_agent, create_rag_agent
-from bm25_index import BM25Index
-from chat_client import ChatClient
-from chroma_index import ChromaVectorIndex
-from config import Config, create_config
-from document_indexer import DocumentIndexer
-from embeddings import InputType, VoyageEmbedder
-from hybrid_retriever import HybridRetriever
-from indexer import fetch_repo_chunks
-from logging_config import configure_logging
-from mcp_client import MCPClient, create_github_client
-from orchestrator import Orchestrator
-from provider import create_chat_client
-from reranker import VoyageReranker
+from repo_lens.agents.agent import AgentName, create_github_agent, create_rag_agent
+from repo_lens.agents.orchestrator import Orchestrator
+from repo_lens.core.config import Config, create_config
+from repo_lens.core.logging_config import configure_logging
+from repo_lens.core.mcp_client import MCPClient, create_github_client
+from repo_lens.providers.chat_client import ChatClient
+from repo_lens.providers.provider import create_chat_client
+from repo_lens.rag.bm25_index import BM25Index
+from repo_lens.rag.chroma_index import ChromaVectorIndex
+from repo_lens.rag.document_indexer import DocumentIndexer
+from repo_lens.rag.embeddings import InputType, VoyageEmbedder
+from repo_lens.rag.hybrid_retriever import HybridRetriever
+from repo_lens.rag.indexer import fetch_repo_chunks
+from repo_lens.rag.reranker import VoyageReranker
 
 CHROMA_COLLECTION_NAME = "repo_chunks"
 
@@ -210,10 +210,14 @@ async def main() -> None:
         )
 
 
-if __name__ == "__main__":
+def cli() -> None:
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
         pass
     except Exception as e:
         logger.exception("Unexpected error: %s", e)
+
+
+if __name__ == "__main__":
+    cli()

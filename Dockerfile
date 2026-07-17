@@ -7,8 +7,7 @@ WORKDIR /app
 
 COPY . .
 
-RUN pip install .
+# Editable install so the ./src volume mount picks up live code changes
+RUN pip install -e .
 
-WORKDIR /app/src
-
-CMD ["python", "-u", "chat_cli.py"]
+CMD ["python", "-u", "-m", "repo_lens.app.chat_cli"]

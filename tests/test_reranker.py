@@ -1,7 +1,7 @@
 from typing import Any
 from unittest.mock import MagicMock
 
-from reranker import VoyageReranker
+from repo_lens.rag.reranker import VoyageReranker
 
 MODEL = "rerank-2"
 DOCS = ["doc one", "doc two"]

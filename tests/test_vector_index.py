@@ -1,6 +1,6 @@
 import pytest
 
-from vector_index import VectorIndex
+from repo_lens.rag.vector_index import VectorIndex
 
 vec1 = [1.0, 0.0, 0.0]
 vec2 = [0.0, 1.0, 0.0]

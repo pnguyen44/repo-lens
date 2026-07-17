@@ -1,6 +1,6 @@
 from typing import Any
 
-from protocols import SearchIndex
+from repo_lens.rag.protocols import SearchIndex
 
 
 def validate_document(document: dict[str, Any], index: int | None = None) -> None:

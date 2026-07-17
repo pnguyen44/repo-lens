@@ -3,7 +3,7 @@ import re
 from collections import Counter
 from typing import Any, Callable
 
-from hybrid_retriever import validate_document
+from repo_lens.rag.hybrid_retriever import validate_document
 
 
 class BM25Index:

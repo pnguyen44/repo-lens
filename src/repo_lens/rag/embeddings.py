@@ -5,7 +5,7 @@ from voyageai.client import Client as VoyageClient
 
 from enum import Enum
 
-from voyage import voyage_retry
+from repo_lens.rag.voyage import voyage_retry
 
 logger = logging.getLogger(__name__)
 

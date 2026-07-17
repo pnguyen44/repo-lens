@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import MagicMock
-from document_indexer import DocumentIndexer
+from repo_lens.rag.document_indexer import DocumentIndexer
 
 
 @pytest.fixture

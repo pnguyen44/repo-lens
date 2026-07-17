@@ -2,22 +2,26 @@ import logging
 import textwrap
 from pathlib import Path
 from typing import Any
+
 from dotenv import load_dotenv
-from chat import MAX_RETRIES
-from chat_client import ChatClient
-from config import create_config
-from embeddings import Embedder, VoyageEmbedder, InputType
-from provider import create_chat_client
-from structured_output import parse_with_retry
-from vector_index import VectorIndex
-from chunker import chunk_by_section
-from rag_eval_dataset import EVAL_CASES
 from voyageai.client import Client as VoyageClient
-from models import FaithfulnessVerdict
+
+from repo_lens.agents.chat import MAX_RETRIES
+from repo_lens.core.config import create_config
+from repo_lens.evals.models import FaithfulnessVerdict
+from repo_lens.evals.rag_eval_dataset import EVAL_CASES
+from repo_lens.evals.structured_output import parse_with_retry
+from repo_lens.providers.chat_client import ChatClient
+from repo_lens.providers.provider import create_chat_client
+from repo_lens.rag.chunker import chunk_by_section
+from repo_lens.rag.embeddings import Embedder, InputType, VoyageEmbedder
+from repo_lens.rag.vector_index import VectorIndex
 
 logger = logging.getLogger(__name__)
 
-FIXTURE_PATH = Path(__file__).parent / "../tests/fixtures/hyperfleet_api_readme.md"
+FIXTURE_PATH = (
+    Path(__file__).resolve().parents[3] / "tests/fixtures/hyperfleet_api_readme.md"
+)
 
 
 class RAGEvaluator:

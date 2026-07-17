@@ -1,5 +1,5 @@
 import pytest
-from chroma_index import ChromaVectorIndex
+from repo_lens.rag.chroma_index import ChromaVectorIndex
 
 
 fake_embedding = [1.0, 0.0, 0.0]

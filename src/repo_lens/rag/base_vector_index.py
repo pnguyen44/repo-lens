@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Callable, Any
-from hybrid_retriever import validate_document
+from repo_lens.rag.hybrid_retriever import validate_document
 
 
 class BaseVectorIndex(ABC):
