@@ -4,6 +4,7 @@ AI-powered CLI for chatting about GitHub repositories. Uses RAG (Retrieval-Augme
 
 ## Table of Contents
 
+- [Architecture](#architecture)
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
 - [Configuration](#configuration)
@@ -13,6 +14,10 @@ AI-powered CLI for chatting about GitHub repositories. Uses RAG (Retrieval-Augme
 - [Prompt Eval Tool](#prompt-eval-tool)
 - [Testing](#testing)
 - [Pre-commit Setup](#pre-commit-setup)
+
+## Architecture
+
+A planner–delegate orchestrator routes each query to specialist agents (GitHub MCP tools and RAG over indexed repo content). See [DESIGN.md](DESIGN.md) for the sequence diagram and component responsibilities.
 
 ## Prerequisites
 
