@@ -45,25 +45,42 @@ async def validate_repo(github_mcp: MCPClient, owner: str, repo: str) -> bool:
         return False
 
 
-async def resolve_repo(github_mcp: MCPClient, owner: str) -> str:
+def resolve_owner(config: Config) -> str:
+    if config.default_org:
+        entered = input(f"> Org [{config.default_org}] (Enter to keep): ").strip()
+        return entered or config.default_org
     while True:
-        repo = input("> Repo name: ")
+        owner = input("> Org:").strip()
+        if owner:
+            return owner
+
+
+async def resolve_repo(github_mcp: MCPClient, owner: str) -> str | None:
+    while True:
+        repo = input("> Repo name (or /back): ").strip()
+        if repo.lower() == "/back":
+            return None
         if await validate_repo(github_mcp=github_mcp, owner=owner, repo=repo):
             return repo
 
 
-async def ensure_indexed(
-    github_mcp: MCPClient, owner: str, document_indexer: DocumentIndexer
-) -> str:
-    repo = await resolve_repo(github_mcp=github_mcp, owner=owner)
+async def select_repo(github_mcp: MCPClient, config: Config) -> tuple[str, str]:
+    while True:
+        owner = resolve_owner(config)
+        repo = await resolve_repo(github_mcp=github_mcp, owner=owner)
+        if repo is None:
+            continue
+        return owner, repo
 
+
+async def ensure_indexed(
+    github_mcp: MCPClient, owner: str, repo: str, document_indexer: DocumentIndexer
+) -> None:
     repo_key = f"{owner}/{repo}"
 
     if not document_indexer.exits(key="repo", value=repo_key):
         docs = await fetch_repo_chunks(github_mcp=github_mcp, owner=owner, repo=repo)
-
         document_indexer.index(docs)
-    return repo
 
 
 async def cli_on_delegate(agent_name: str, task: str) -> None:
@@ -154,7 +171,6 @@ async def main() -> None:
             create_github_client(config.github_token)
         )
 
-        owner = config.default_org or input("> GITHUB org: ")
         vector_index, retriever = create_retriever_stack(config)
         document_indexer = DocumentIndexer(
             vector_index=vector_index, retriever=retriever
@@ -164,8 +180,13 @@ async def main() -> None:
         if count > 0:
             logger.info("Loaded %d chunks from persistent storage.", count)
 
-        repo = await ensure_indexed(
-            github_mcp=github_mcp, owner=owner, document_indexer=document_indexer
+        owner, repo = await select_repo(github_mcp=github_mcp, config=config)
+
+        await ensure_indexed(
+            github_mcp=github_mcp,
+            owner=owner,
+            repo=repo,
+            document_indexer=document_indexer,
         )
 
         print_status(label="Chatting about", message=f"{owner}/{repo}")
