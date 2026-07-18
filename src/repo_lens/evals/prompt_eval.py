@@ -2,12 +2,14 @@ import json
 import logging
 import sys
 from typing import Any
+
 from pydantic import TypeAdapter, ValidationError
-from repo_lens.providers.chat_client import ChatClient
+
 from repo_lens.core.config import create_config
 from repo_lens.evals.models import GradeResult, TestCase
-from repo_lens.providers.provider import create_chat_client
 from repo_lens.evals.structured_output import parse_with_retry
+from repo_lens.providers.chat_client import ChatClientProtocol
+from repo_lens.providers.provider import create_chat_client
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +17,7 @@ adapter = TypeAdapter(list[TestCase])
 
 
 class PromptEvaluator:
-    def __init__(self, client: ChatClient[Any]) -> None:
+    def __init__(self, client: ChatClientProtocol) -> None:
         self.client = client
 
     def generate_dataset(

@@ -2,13 +2,13 @@ from typing import Any, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
-from repo_lens.providers.chat_client import ChatClient, ChatResponse
+from repo_lens.providers.chat_client import ChatClientProtocol, ChatResponse
 
 T = TypeVar("T", bound=BaseModel)
 
 
 def parse_with_retry(
-    chat_client: ChatClient[Any],
+    chat_client: ChatClientProtocol,
     response: ChatResponse,
     messages: list[Any],
     model_type: type[T],

@@ -11,7 +11,7 @@ from repo_lens.core.config import create_config
 from repo_lens.evals.models import FaithfulnessVerdict
 from repo_lens.evals.rag_eval_dataset import EVAL_CASES
 from repo_lens.evals.structured_output import parse_with_retry
-from repo_lens.providers.chat_client import ChatClient
+from repo_lens.providers.chat_client import ChatClientProtocol
 from repo_lens.providers.provider import create_chat_client
 from repo_lens.rag.chunker import chunk_by_section
 from repo_lens.rag.embeddings import Embedder, InputType, VoyageEmbedder
@@ -31,7 +31,7 @@ class RAGEvaluator:
         index: VectorIndex,
         eval_cases: list[dict[str, Any]],
         fixture_path: Path,
-        chat_client: ChatClient[Any] | None = None,
+        chat_client: ChatClientProtocol | None = None,
     ) -> None:
         self.embedder = embedder
         self.index = index

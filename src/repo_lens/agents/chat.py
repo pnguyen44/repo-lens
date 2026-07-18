@@ -9,7 +9,7 @@ from anthropic import AuthenticationError, BadRequestError, RateLimitError
 from repo_lens.agents.tool_manager import ToolManager
 from repo_lens.core.mcp_client import MCPClient
 from repo_lens.core.trace_context import start_query_trace
-from repo_lens.providers.chat_client import ChatClient, StreamError
+from repo_lens.providers.chat_client import ChatClientProtocol, StreamError
 from repo_lens.rag.embeddings import Embedder
 from repo_lens.rag.hybrid_retriever import HybridRetriever
 from repo_lens.rag.reranker import Reranker
@@ -36,7 +36,7 @@ class RunStatus(Enum):
 class Chat:
     def __init__(
         self,
-        chat_client: ChatClient[Any],
+        chat_client: ChatClientProtocol,
         *,
         mcp_clients: dict[str, MCPClient] | None = None,
         system_prompt: str | None = None,

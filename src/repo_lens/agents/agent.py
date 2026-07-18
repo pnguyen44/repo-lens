@@ -1,9 +1,8 @@
 from enum import Enum
-from typing import Any
 
 from repo_lens.agents.chat import Chat, OnToolInputCallback, OnToolStartCallback
 from repo_lens.core.mcp_client import MCPClient
-from repo_lens.providers.chat_client import ChatClient
+from repo_lens.providers.chat_client import ChatClientProtocol
 from repo_lens.rag.hybrid_retriever import HybridRetriever
 from repo_lens.rag.reranker import Reranker
 
@@ -32,7 +31,9 @@ class Agent:
         )
 
 
-def create_github_agent(chat_client: ChatClient[Any], github_mcp: MCPClient) -> Agent:
+def create_github_agent(
+    chat_client: ChatClientProtocol, github_mcp: MCPClient
+) -> Agent:
     chat = Chat(
         chat_client=chat_client,
         mcp_clients={"github": github_mcp},
@@ -48,7 +49,7 @@ def create_github_agent(chat_client: ChatClient[Any], github_mcp: MCPClient) -> 
 
 
 def create_rag_agent(
-    chat_client: ChatClient[Any],
+    chat_client: ChatClientProtocol,
     hybrid_retriever: HybridRetriever,
     reranker: Reranker | None = None,
 ) -> Agent:

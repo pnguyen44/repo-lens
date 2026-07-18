@@ -4,7 +4,7 @@ from typing import Any, Protocol
 
 from repo_lens.agents.agent import Agent, AgentName
 from repo_lens.agents.chat import OnToolInputCallback, OnToolStartCallback
-from repo_lens.providers.chat_client import ChatClient
+from repo_lens.providers.chat_client import ChatClientProtocol
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +58,7 @@ class Orchestrator:
         self,
         *,
         agents: dict[AgentName, Agent],
-        chat_client: ChatClient[Any],
+        chat_client: ChatClientProtocol,
         max_delegations: int = 5,
     ) -> None:
         self.agents = agents

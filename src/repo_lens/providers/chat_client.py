@@ -60,6 +60,39 @@ class ChatParams(TypedDict, total=False):
 T = TypeVar("T")
 
 
+class ChatClientProtocol(Protocol):
+    model: str
+    token_tracker: TokenTracker
+
+    def add_user_message(
+        self, messages: list[Any], content: str | list[Any]
+    ) -> None: ...
+
+    def add_assistant_message(
+        self, messages: list[Any], message: ChatResponse | str
+    ) -> None: ...
+
+    def build_document_block(self, content: str, title: str) -> dict[str, Any]: ...
+
+    def chat_json(
+        self, messages: list[Any], **kwargs: Unpack[ChatParams]
+    ) -> ChatResponse: ...
+
+    def chat(
+        self, messages: list[Any], **kwargs: Unpack[ChatParams]
+    ) -> ChatResponse: ...
+
+    def chat_stream(
+        self, messages: list[Any], **kwargs: Unpack[ChatParams]
+    ) -> MessageStream: ...
+
+    def record_usage(self, usage: Any) -> None: ...
+
+    def extract_citation_titles(self, message: Any) -> set[str]: ...
+
+    def has_web_search_results(self, raw: Any) -> bool: ...
+
+
 class ChatClient(ABC, Generic[T]):
     def __init__(
         self, client: T, model: str, token_tracker: TokenTracker | None = None

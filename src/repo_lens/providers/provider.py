@@ -1,12 +1,11 @@
-from typing import Any
 from repo_lens.core.config import Config
-from repo_lens.providers.chat_client import ChatClient
+from repo_lens.providers.chat_client import ChatClientProtocol
 from repo_lens.providers.token_tracker import TokenTracker
 
 
 def create_chat_client(
     config: Config, token_tracker: TokenTracker | None = None
-) -> ChatClient[Any]:
+) -> ChatClientProtocol:
     model = config.model
 
     if config.provider == "gemini":
