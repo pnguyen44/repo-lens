@@ -41,6 +41,10 @@ Rules:
 """
 
 
+def delegation_label(agent_name: str) -> str:
+    return f"Delegating to {agent_name} agent"
+
+
 class OnDelegateCallback(Protocol):
     async def __call__(self, agent_name: str, task: str) -> None: ...
 
@@ -89,6 +93,8 @@ class Orchestrator:
                     if on_text:
                         on_text(chunk.text)
             response = stream.get_final_message()
+            if response.usage:
+                self.chat_client.record_usage(response.usage)
         self.chat_client.add_assistant_message(messages=self.messages, message=response)
 
         return response, text
@@ -126,7 +132,8 @@ class Orchestrator:
                 if not agent:
                     break
 
-                logger.info("Delegating to %s: %s", agent_name, task)
+                label = delegation_label(agent_name)
+                logger.info("%s: %s", label, task)
                 if on_delegate:
                     await on_delegate(agent_name=agent_name, task=task)
 

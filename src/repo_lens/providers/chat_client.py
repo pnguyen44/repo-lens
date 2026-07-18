@@ -61,10 +61,12 @@ T = TypeVar("T")
 
 
 class ChatClient(ABC, Generic[T]):
-    def __init__(self, client: T, model: str) -> None:
+    def __init__(
+        self, client: T, model: str, token_tracker: TokenTracker | None = None
+    ) -> None:
         self.client = client
         self.model = model
-        self.token_tracker = TokenTracker()
+        self.token_tracker = token_tracker or TokenTracker()
 
     def add_user_message(self, messages: list[Any], content: str | list[Any]) -> None:
         messages.append({"role": "user", "content": content})

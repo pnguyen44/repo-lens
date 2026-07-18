@@ -2,27 +2,15 @@ import asyncio
 import logging
 import os
 from contextlib import AsyncExitStack
-from typing import Any
 
 from rich import print
-from voyageai.client import Client as VoyageClient
 
-from repo_lens.agents.agent import AgentName, create_github_agent, create_rag_agent
-from repo_lens.agents.orchestrator import Orchestrator
+from repo_lens.agents.orchestrator import delegation_label
+from repo_lens.app.runtime import App
 from repo_lens.core.config import Config, create_config
 from repo_lens.core.logging_config import configure_logging
 from repo_lens.core.mcp_client import MCPClient, create_github_client
-from repo_lens.providers.chat_client import ChatClient
-from repo_lens.providers.provider import create_chat_client
-from repo_lens.rag.bm25_index import BM25Index
-from repo_lens.rag.chroma_index import ChromaVectorIndex
-from repo_lens.rag.document_indexer import DocumentIndexer
-from repo_lens.rag.embeddings import InputType, VoyageEmbedder
-from repo_lens.rag.hybrid_retriever import HybridRetriever
 from repo_lens.rag.indexer import fetch_repo_chunks
-from repo_lens.rag.reranker import VoyageReranker
-
-CHROMA_COLLECTION_NAME = "repo_chunks"
 
 logger = logging.getLogger(__name__)
 
@@ -74,17 +62,21 @@ async def select_repo(github_mcp: MCPClient, config: Config) -> tuple[str, str]:
 
 
 async def ensure_indexed(
-    github_mcp: MCPClient, owner: str, repo: str, document_indexer: DocumentIndexer
+    app: App,
+    owner: str,
+    repo: str,
 ) -> None:
     repo_key = f"{owner}/{repo}"
 
-    if not document_indexer.exits(key="repo", value=repo_key):
-        docs = await fetch_repo_chunks(github_mcp=github_mcp, owner=owner, repo=repo)
-        document_indexer.index(docs)
+    if not app.document_indexer.exits(key="repo", value=repo_key):
+        docs = await fetch_repo_chunks(
+            github_mcp=app.github_mcp, owner=owner, repo=repo
+        )
+        app.document_indexer.index(docs)
 
 
 async def cli_on_delegate(agent_name: str, task: str) -> None:
-    print_status(label=f"Delegating to {agent_name}", message=task)
+    print_status(label=delegation_label(agent_name), message=task)
 
 
 def cli_on_tool_start(tool_name: str) -> None:
@@ -96,12 +88,9 @@ def cli_on_tool_input(partial_json: str) -> None:
 
 
 async def chat_loop(
-    github_mcp: MCPClient,
+    app: App,
     owner: str,
     repo: str,
-    document_indexer: DocumentIndexer,
-    orchestrator: Orchestrator,
-    chat_client: ChatClient[Any],
 ) -> None:
     try:
         while True:
@@ -112,14 +101,14 @@ async def chat_loop(
                 repo_key = f"{owner}/{repo}"
                 print_status(label="Re-indexing", message=repo_key)
                 docs = await fetch_repo_chunks(
-                    github_mcp=github_mcp,
+                    github_mcp=app.github_mcp,
                     owner=owner,
                     repo=repo,
                 )
-                document_indexer.reindex(key="repo", value=repo_key, documents=docs)
+                app.document_indexer.reindex(key="repo", value=repo_key, documents=docs)
                 print_status(label="Re-indexed", message=repo_key)
                 continue
-            await orchestrator.run(
+            await app.orchestrator.run(
                 query=user_input,
                 on_delegate=cli_on_delegate,
                 on_text=lambda t: print(t, end="", flush=True),
@@ -130,44 +119,7 @@ async def chat_loop(
     except KeyboardInterrupt:
         print("\nexiting")
     finally:
-        print_status(label="Tokens", message=str(chat_client.token_tracker.summary()))
-
-
-def create_retriever_stack(config: Config) -> tuple[ChromaVectorIndex, HybridRetriever]:
-    embedder = VoyageEmbedder(VoyageClient(), model=config.voyage_embed_model)
-
-    vector_index = ChromaVectorIndex(
-        collection_name=CHROMA_COLLECTION_NAME,
-        embedding_fn=lambda texts: embedder.generate_embeddings(
-            texts, input_type=InputType.DOCUMENT
-        ),
-        host=config.chroma_host,
-        port=config.chroma_port,
-    )
-    bm25 = BM25Index()
-
-    retriever = HybridRetriever(vector_index, bm25)
-
-    return vector_index, retriever
-
-
-def create_orchestrator(
-    config: Config,
-    chat_client: ChatClient[Any],
-    retriever: HybridRetriever,
-    github_mcp: MCPClient,
-) -> Orchestrator:
-    reranker = VoyageReranker(client=VoyageClient(), model=config.voyage_rerank_model)
-
-    github_agent = create_github_agent(chat_client=chat_client, github_mcp=github_mcp)
-    rag_agent = create_rag_agent(
-        chat_client=chat_client, hybrid_retriever=retriever, reranker=reranker
-    )
-
-    return Orchestrator(
-        agents={AgentName.GITHUB: github_agent, AgentName.RAG: rag_agent},
-        chat_client=chat_client,
-    )
+        print_status(label="Tokens", message=str(app.token_summary()))
 
 
 async def main() -> None:
@@ -181,42 +133,26 @@ async def main() -> None:
             create_github_client(config.github_token)
         )
 
-        vector_index, retriever = create_retriever_stack(config)
-        document_indexer = DocumentIndexer(
-            vector_index=vector_index, retriever=retriever
-        )
+        app = App(config=config, github_mcp=github_mcp)
 
-        count = document_indexer.load_from_store()
+        count = app.document_indexer.load_from_store()
         if count > 0:
             logger.info("Loaded %d chunks from persistent storage.", count)
 
         owner, repo = await select_repo(github_mcp=github_mcp, config=config)
 
         await ensure_indexed(
-            github_mcp=github_mcp,
+            app=app,
             owner=owner,
             repo=repo,
-            document_indexer=document_indexer,
         )
 
         print_status(label="Chatting about", message=f"{owner}/{repo}")
 
-        chat_client = create_chat_client(config=config)
-
-        orchestrator = create_orchestrator(
-            config=config,
-            chat_client=chat_client,
-            retriever=retriever,
-            github_mcp=github_mcp,
-        )
-
         await chat_loop(
-            github_mcp=github_mcp,
+            app=app,
             owner=owner,
             repo=repo,
-            document_indexer=document_indexer,
-            orchestrator=orchestrator,
-            chat_client=chat_client,
         )
 
 

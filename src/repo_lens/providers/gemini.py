@@ -13,7 +13,7 @@ from repo_lens.providers.chat_client import (
     StreamError,
     ToolCall,
 )
-from repo_lens.providers.token_tracker import UsagePayload
+from repo_lens.providers.token_tracker import TokenTracker, UsagePayload
 
 logger = logging.getLogger(__name__)
 
@@ -154,8 +154,10 @@ class GeminiStream:
 
 
 class Gemini(ChatClient[GenaiClient]):
-    def __init__(self, client: GenaiClient, model: str) -> None:
-        super().__init__(client, model)
+    def __init__(
+        self, client: GenaiClient, model: str, token_tracker: TokenTracker | None = None
+    ) -> None:
+        super().__init__(client=client, model=model, token_tracker=token_tracker)
         self._previous_interaction_id: str | None = None
 
     def build_document_block(self, content: str, title: str) -> dict[str, Any]:

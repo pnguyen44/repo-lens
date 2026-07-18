@@ -12,7 +12,7 @@ from repo_lens.providers.chat_client import (
     StreamChunk,
     ToolCall,
 )
-from repo_lens.providers.token_tracker import UsagePayload
+from repo_lens.providers.token_tracker import TokenTracker, UsagePayload
 
 logger = logging.getLogger(__name__)
 
@@ -80,8 +80,10 @@ class ClaudeStream:
 
 
 class Claude(ChatClient[Anthropic]):
-    def __init__(self, client: Anthropic, model: str) -> None:
-        super().__init__(client, model)
+    def __init__(
+        self, client: Anthropic, model: str, token_tracker: TokenTracker | None = None
+    ) -> None:
+        super().__init__(client=client, model=model, token_tracker=token_tracker)
 
     def build_document_block(self, content: str, title: str) -> dict[str, Any]:
         return {
