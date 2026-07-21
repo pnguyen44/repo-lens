@@ -1,9 +1,10 @@
 import math
 import re
 from collections import Counter
-from typing import Any, Callable
+from typing import Callable
 
 from repo_lens.rag.hybrid_retriever import validate_document
+from repo_lens.rag.types import IndexedDocument
 
 
 class BM25Index:
@@ -13,7 +14,7 @@ class BM25Index:
         b: float = 0.75,
         tokenizer: Callable[[str], list[str]] | None = None,
     ) -> None:
-        self.documents: list[dict[str, Any]] = []
+        self.documents: list[IndexedDocument] = []
         self._tokenized_docs: list[list[str]] = []
         self._doc_len: list[int] = []
         self._doc_freqs: dict[str, int] = {}
@@ -30,7 +31,7 @@ class BM25Index:
         tokens = re.split(r"\W+", text)
         return [token for token in tokens if token]
 
-    def add_document(self, document: dict[str, Any]) -> None:
+    def add_document(self, document: IndexedDocument) -> None:
         validate_document(document)
 
         doc_tokens = self._tokenizer(document["content"])
@@ -39,7 +40,7 @@ class BM25Index:
         self.documents.append(document)
         self._update_doc_stats(doc_tokens)
 
-    def add_documents(self, documents: list[dict[str, Any]]) -> None:
+    def add_documents(self, documents: list[IndexedDocument]) -> None:
         if not documents:
             return
 
@@ -121,8 +122,13 @@ class BM25Index:
         return score
 
     def search(
-        self, query: str, k: int = 1, score_normalization_factor: float = 0.1
-    ) -> list[tuple[dict[str, Any], float]]:
+        self,
+        *,
+        query: str,
+        k: int = 1,
+        score_normalization_factor: float = 0.1,
+        repo: str | None = None,
+    ) -> list[tuple[IndexedDocument, float]]:
         if not self.documents:
             return []
 
@@ -148,6 +154,8 @@ class BM25Index:
         # Score each document against the query, keep non-zero scores
         raw_scores = []
         for i in range(len(self.documents)):
+            if repo is not None and self.documents[i].get("repo") != repo:
+                continue
             raw_score = self._compute_bm25_score(query_tokens=query_tokens, doc_index=i)
             if raw_score > 1e-9:
                 raw_scores.append((raw_score, self.documents[i]))

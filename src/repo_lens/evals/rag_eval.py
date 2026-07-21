@@ -119,7 +119,7 @@ class RAGEvaluator:
                 query_vector = self.embedder.generate_embeddings(
                     [question], input_type=InputType.QUERY
                 )[0]
-                hits = self.index.search(query_vector, k)
+                hits = self.index.search(query=query_vector, k=k)
                 context = "\n".join([doc["content"] for doc, _dist in hits])
                 answer = self.generate_answer(context=context, question=question)
                 judgement = self.judge_faithfulness(
@@ -151,7 +151,7 @@ class RAGEvaluator:
         results = []
 
         for case, query_vector in zip(self.eval_cases, query_vectors):
-            hits = self.index.search(query_vector, k)
+            hits = self.index.search(query=query_vector, k=k)
             result: dict[str, Any] = {"question": case["question"]}
 
             if "expected_sections" in case:

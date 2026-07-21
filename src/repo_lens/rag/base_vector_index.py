@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
-from typing import Callable, Any
+from typing import Any, Callable
+
 from repo_lens.rag.hybrid_retriever import validate_document
+from repo_lens.rag.types import IndexedDocument
 
 
 class BaseVectorIndex(ABC):
@@ -15,14 +17,14 @@ class BaseVectorIndex(ABC):
             raise ValueError("Embedding function not provided during initialization.")
         return self._embedding_fn
 
-    def add_document(self, document: dict[str, Any]) -> None:
+    def add_document(self, document: IndexedDocument) -> None:
         validate_document(document)
         embed = self._require_embedding_fn()
         content = document["content"]
         vector = embed([content])[0]
         self._store(vector, document)
 
-    def add_documents(self, documents: list[dict[str, Any]]) -> None:
+    def add_documents(self, documents: list[IndexedDocument]) -> None:
         embed = self._require_embedding_fn()
 
         if not documents:
@@ -46,9 +48,9 @@ class BaseVectorIndex(ABC):
             raise TypeError("Query must be either a string or a list of numbers.")
 
     @abstractmethod
-    def _store(self, vector: list[float], document: dict[str, Any]) -> None: ...
+    def _store(self, vector: list[float], document: IndexedDocument) -> None: ...
 
     @abstractmethod
     def _store_batch(
-        self, vectors: list[list[float]], documents: list[dict[str, Any]]
+        self, vectors: list[list[float]], documents: list[IndexedDocument]
     ) -> None: ...

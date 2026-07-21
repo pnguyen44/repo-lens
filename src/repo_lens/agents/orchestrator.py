@@ -4,6 +4,7 @@ from typing import Any, Protocol
 
 from repo_lens.agents.agent import Agent, AgentName
 from repo_lens.agents.chat import OnToolInputCallback, OnToolStartCallback
+from repo_lens.core.repo_context import RepoContext
 from repo_lens.providers.chat_client import ChatClientProtocol
 
 logger = logging.getLogger(__name__)
@@ -102,6 +103,7 @@ class Orchestrator:
     async def run(
         self,
         query: str,
+        repo_context: RepoContext | None = None,
         on_delegate: OnDelegateCallback | None = None,
         on_text: OnTextCallback | None = None,
         on_tool_start: OnToolStartCallback | None = None,
@@ -139,6 +141,7 @@ class Orchestrator:
 
                 result = await agent.run(
                     task,
+                    repo_context=repo_context,
                     on_tool_start=on_tool_start,
                     on_tool_input=on_tool_input,
                 )

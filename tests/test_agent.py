@@ -8,6 +8,7 @@ from repo_lens.agents.agent import (
     create_github_agent,
     create_rag_agent,
 )
+from repo_lens.core.repo_context import RepoContext
 
 
 def test_create_github_agent_wires_correct_config() -> None:
@@ -54,5 +55,26 @@ async def test_agent_run_clears_messages_and_delegates() -> None:
     assert mock_chat.messages == []
     assert result == "answer"
     mock_chat.run.assert_called_once_with(
-        query="some task", on_tool_start=None, on_tool_input=None
+        query="some task",
+        repo_context=None,
+        on_tool_start=None,
+        on_tool_input=None,
+    )
+
+
+@pytest.mark.asyncio
+async def test_agent_run_forwards_repo_context() -> None:
+    mock_chat = MagicMock()
+    mock_chat.run = AsyncMock(return_value="answer")
+    mock_chat.messages = []
+    repo_context = RepoContext(owner="org", repo="my-repo")
+
+    agent = Agent(name=AgentName.GITHUB, chat=mock_chat, description="test agent")
+    await agent.run("some task", repo_context=repo_context)
+
+    mock_chat.run.assert_called_once_with(
+        query="some task",
+        repo_context=repo_context,
+        on_tool_start=None,
+        on_tool_input=None,
     )

@@ -1,6 +1,7 @@
 import pytest
-from repo_lens.rag.chroma_index import ChromaVectorIndex
 
+from repo_lens.rag.chroma_index import ChromaVectorIndex
+from repo_lens.rag.types import IndexedDocument
 
 fake_embedding = [1.0, 0.0, 0.0]
 
@@ -9,19 +10,19 @@ def fake_embedding_fn(texts: list[str]) -> list[list[float]]:
     return [fake_embedding] * len(texts)
 
 
-doc1 = {
+doc1: IndexedDocument = {
     "content": "How to install the API",
     "repo": "owner/repo-a",
     "section": "Installation",
     "url": "https://github.com/owner/repo-a",
 }
-doc2 = {
+doc2: IndexedDocument = {
     "content": "Authentication uses bearer tokens",
     "repo": "owner/repo-a",
     "section": "Auth",
     "url": "https://github.com/owner/repo-a",
 }
-doc3 = {
+doc3: IndexedDocument = {
     "content": "Deployment guide for production",
     "repo": "owner/repo-b",
     "section": "Deploy",

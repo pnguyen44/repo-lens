@@ -4,6 +4,7 @@ from typing import Any, Literal
 
 from mcp.types import CallToolResult, TextContent
 
+from repo_lens.core.repo_context import RepoContext
 from repo_lens.providers.chat_client import ToolCall
 from repo_lens.core.mcp_client import MCPClient
 
@@ -51,13 +52,23 @@ class ToolManager:
 
     @classmethod
     async def execute_tool_requests(
-        cls, clients: dict[str, MCPClient], tool_calls: list[ToolCall]
+        cls,
+        clients: dict[str, MCPClient],
+        tool_calls: list[ToolCall],
+        repo_context: RepoContext | None = None,
     ) -> list[dict[str, Any]]:
         tool_result_blocks: list[dict[str, Any]] = []
         for tool_call in tool_calls:
             tool_use_id = tool_call.id
             tool_name = tool_call.name
             tool_input = tool_call.input
+
+            if repo_context is not None:
+                tool_input = {
+                    **tool_input,
+                    "owner": repo_context.owner,
+                    "repo": repo_context.repo,
+                }
 
             client = await cls._find_client_with_tool(list(clients.values()), tool_name)
 

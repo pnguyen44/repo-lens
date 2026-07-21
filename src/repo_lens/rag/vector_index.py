@@ -3,6 +3,7 @@ from enum import Enum
 from typing import Any, Callable
 
 from repo_lens.rag.base_vector_index import BaseVectorIndex
+from repo_lens.rag.types import IndexedDocument
 
 
 class DistanceMetric(Enum):
@@ -18,7 +19,7 @@ class VectorIndex(BaseVectorIndex):
     ) -> None:
         super().__init__(embedding_fn=embedding_fn)
         self.vectors: list[list[float]] = []
-        self.documents: list[dict[str, Any]] = []
+        self.documents: list[IndexedDocument] = []
         self._vector_dim: int | None = None
 
         self._distance_functions = {
@@ -33,7 +34,7 @@ class VectorIndex(BaseVectorIndex):
 
         self._distance_metric = distance_metric
 
-    def add_vector(self, vector: list[float], document: dict[str, Any]) -> None:
+    def add_vector(self, vector: list[float], document: IndexedDocument) -> None:
         if not vector:
             raise ValueError("Vector must not be empty")
         if not self.vectors:
@@ -46,11 +47,11 @@ class VectorIndex(BaseVectorIndex):
         self.vectors.append(list(vector))
         self.documents.append(document)
 
-    def _store(self, vector: list[float], document: dict[str, Any]) -> None:
+    def _store(self, vector: list[float], document: IndexedDocument) -> None:
         self.add_vector(vector=vector, document=document)
 
     def _store_batch(
-        self, vectors: list[list[float]], documents: list[dict[str, Any]]
+        self, vectors: list[list[float]], documents: list[IndexedDocument]
     ) -> None:
         for vector, document in zip(vectors, documents):
             self.add_vector(vector=vector, document=document)
@@ -68,7 +69,7 @@ class VectorIndex(BaseVectorIndex):
 
     def _find_nearest(
         self, query_vector: list[float], k: int
-    ) -> list[tuple[dict[str, Any], float]]:
+    ) -> list[tuple[IndexedDocument, float]]:
         dist_func = self._get_distance_fn()
 
         distances = [
@@ -80,14 +81,21 @@ class VectorIndex(BaseVectorIndex):
 
         return [(doc, dist) for dist, doc in distances[:k]]
 
-    def search(self, query: Any, k: int = 1) -> list[tuple[dict[str, Any], float]]:
+    def search(
+        self, *, query: Any, k: int = 1, repo: str | None = None
+    ) -> list[tuple[IndexedDocument, float]]:
         if not self.vectors or self._vector_dim is None:
             return []
 
         query_vector = self._resolve_query_vector(query)
         self._validate_search(query_vector, k)
 
-        return self._find_nearest(query_vector, k)
+        candidate_k = k if repo is None else len(self.vectors)
+        results = self._find_nearest(query_vector, candidate_k)
+        if repo is not None:
+            results = [(doc, dist) for doc, dist in results if doc.get("repo") == repo]
+            return results[:k]
+        return results
 
     def _validate_vector_dimensions(self, vec1: list[float], vec2: list[float]) -> None:
         if len(vec1) != len(vec2):
@@ -125,4 +133,8 @@ class VectorIndex(BaseVectorIndex):
         return len(self.vectors)
 
     def __repr__(self) -> str:
-        return f"VectorIndex(count={len(self)}, dim={self._vector_dim}, metric='{self._distance_metric.value}', has_embedding_fn={self._embedding_fn is not None})"
+        return (
+            f"VectorIndex(count={len(self)}, dim={self._vector_dim}, "
+            f"metric='{self._distance_metric.value}', "
+            f"has_embedding_fn={self._embedding_fn is not None})"
+        )

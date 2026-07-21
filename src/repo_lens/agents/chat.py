@@ -8,6 +8,7 @@ from anthropic import AuthenticationError, BadRequestError, RateLimitError
 
 from repo_lens.agents.tool_manager import ToolManager
 from repo_lens.core.mcp_client import MCPClient
+from repo_lens.core.repo_context import RepoContext
 from repo_lens.core.trace_context import start_query_trace
 from repo_lens.providers.chat_client import ChatClientProtocol, StreamError
 from repo_lens.rag.embeddings import Embedder
@@ -54,14 +55,18 @@ class Chat:
         self.hybrid_retriever = hybrid_retriever
         self.web_search = web_search
         self.reranker = reranker
+        self.repo_context: RepoContext | None = None
 
     def _build_context(self, query: str) -> str | list[Any]:
         if not self.hybrid_retriever:
             return ""
 
         try:
+            k = 15 if self.reranker else 3
             results = self.hybrid_retriever.search(
-                query_text=query, k=15 if self.reranker else 3
+                query_text=query,
+                k=k,
+                repo=self.repo_context.key if self.repo_context else None,
             )
 
             if self.reranker:
@@ -119,7 +124,7 @@ class Chat:
         ) as stream:
             for chunk in stream:
                 if chunk.type == "text":
-                    print(chunk.text, end="")
+                    print(chunk.text, end="", flush=True)
                     text += chunk.text
                 elif chunk.type == "tool_start":
                     if on_tool_start:
@@ -130,6 +135,10 @@ class Chat:
                 elif chunk.type == "tool_stop":
                     if on_tool_input:
                         print()
+
+            # End the streamed line so later log lines are not glued to the answer.
+            if text:
+                print(flush=True)
 
             response = stream.get_final_message()
 
@@ -187,7 +196,9 @@ class Chat:
         logger.info("Tool call: %s", tool_names)
 
         tool_result_parts = await ToolManager.execute_tool_requests(
-            clients=self.mcp_clients, tool_calls=response.tool_calls
+            clients=self.mcp_clients,
+            tool_calls=response.tool_calls,
+            repo_context=self.repo_context,
         )
 
         self.chat_client.add_user_message(
@@ -198,11 +209,13 @@ class Chat:
     async def run(
         self,
         query: str,
+        repo_context: RepoContext | None = None,
         tool_choice: dict[str, Any] | None = None,
         on_tool_start: OnToolStartCallback | None = None,
         on_tool_input: OnToolInputCallback | None = None,
     ) -> str:
         start_query_trace()
+        self.repo_context = repo_context
         start_query = time.perf_counter()
         final_text_response = ""
 

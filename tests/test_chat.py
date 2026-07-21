@@ -1,8 +1,10 @@
 from typing import Any
 from unittest.mock import MagicMock
-from repo_lens.agents.chat import Chat
+
 import pytest
 
+from repo_lens.agents.chat import Chat
+from repo_lens.core.repo_context import RepoContext
 from repo_lens.rag.hybrid_retriever import HybridRetriever
 from repo_lens.rag.vector_index import VectorIndex
 
@@ -117,3 +119,28 @@ def test_build_context_empty_index() -> None:
     result = chat._build_context("test query")
 
     assert result == ""
+
+
+def test_build_context_filters_by_repo_context_key() -> None:
+    retriever = MagicMock()
+    retriever.search.return_value = []
+
+    chat = Chat(chat_client=MagicMock(), hybrid_retriever=retriever)
+    chat.repo_context = RepoContext(owner="org", repo="my-repo")
+
+    chat._build_context("test query")
+
+    retriever.search.assert_called_once_with(
+        query_text="test query", k=3, repo="org/my-repo"
+    )
+
+
+def test_build_context_without_repo_context_passes_none() -> None:
+    retriever = MagicMock()
+    retriever.search.return_value = []
+
+    chat = Chat(chat_client=MagicMock(), hybrid_retriever=retriever)
+
+    chat._build_context("test query")
+
+    retriever.search.assert_called_once_with(query_text="test query", k=3, repo=None)

@@ -1,6 +1,6 @@
-from typing import Any
 from repo_lens.rag.chroma_index import ChromaVectorIndex
 from repo_lens.rag.hybrid_retriever import HybridRetriever
+from repo_lens.rag.types import IndexedDocument
 
 
 class DocumentIndexer:
@@ -20,11 +20,11 @@ class DocumentIndexer:
     def exits(self, key: str, value: str) -> bool:
         return self._vector_index.exists_in_collection(key, value)
 
-    def index(self, documents: list[dict[str, Any]]) -> int:
+    def index(self, documents: list[IndexedDocument]) -> int:
         self._retriever.add_documents(documents)
         return len(documents)
 
-    def reindex(self, key: str, value: str, documents: list[dict[str, Any]]) -> int:
+    def reindex(self, key: str, value: str, documents: list[IndexedDocument]) -> int:
         self._vector_index.remove_from_collection(key, value)
         self._retriever.add_documents(documents)  # persist new docs
         self._retriever.reload(
@@ -32,5 +32,7 @@ class DocumentIndexer:
         )  # rebuild BM25 from truth
         return len(documents)
 
-    def search(self, query: str, k: int = 5) -> list[tuple[dict[str, Any], float]]:
-        return self._retriever.search(query_text=query, k=k)
+    def search(
+        self, *, query: str, k: int = 5, repo: str | None = None
+    ) -> list[tuple[IndexedDocument, float]]:
+        return self._retriever.search(query_text=query, k=k, repo=repo)

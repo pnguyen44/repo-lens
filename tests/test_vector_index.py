@@ -1,11 +1,12 @@
 import pytest
 
+from repo_lens.rag.types import IndexedDocument
 from repo_lens.rag.vector_index import VectorIndex
 
 vec1 = [1.0, 0.0, 0.0]
 vec2 = [0.0, 1.0, 0.0]
-doc1 = {"content": "doc A"}
-doc2 = {"content": "doc B"}
+doc1: IndexedDocument = {"content": "doc A"}
+doc2: IndexedDocument = {"content": "doc B"}
 
 
 def test_search_returns_closest_match() -> None:
@@ -14,10 +15,18 @@ def test_search_returns_closest_match() -> None:
     index.add_vector(vec1, doc1)
     index.add_vector(vec2, doc2)
 
-    results = index.search(vec1, k=1)
+    results = index.search(query=vec1, k=1)
 
     assert len(results) == 1
     assert results[0][0]["content"] == doc1["content"]
+
+
+def test_search_rejects_positional_query() -> None:
+    index = VectorIndex()
+    index.add_vector(vec1, doc1)
+
+    with pytest.raises(TypeError):
+        index.search(vec1, k=1)  # type: ignore[misc]
 
 
 COSINE_CASES = [
@@ -75,7 +84,7 @@ def test_euclidean_distance(case) -> None:
 
 def test_search_empty_index_returns_empty() -> None:
     index = VectorIndex()
-    results = index.search(vec1, k=1)
+    results = index.search(query=vec1, k=1)
 
     assert results == []
 
@@ -86,7 +95,7 @@ def test_search_returns_results_in_order() -> None:
     index.add_vector([0.9, 0.1, 0.0], {"content": "middle"})
     index.add_vector([0.0, 1.0, 0.0], {"content": "farthest"})
 
-    results = index.search([1.0, 0.0, 0.0], k=3)
+    results = index.search(query=[1.0, 0.0, 0.0], k=3)
 
     assert results[0][0]["content"] == "closest"
     assert results[1][0]["content"] == "middle"
@@ -99,7 +108,7 @@ def test_search_respects_k() -> None:
     index.add_vector([0.0, 1.0], {"content": "b"})
     index.add_vector([0.5, 0.5], {"content": "c"})
 
-    results = index.search([1.0, 0.0], k=2)
+    results = index.search(query=[1.0, 0.0], k=2)
 
     assert len(results) == 2
 
@@ -136,7 +145,7 @@ def test_add_documents_stores_all_documents() -> None:
         return [[float(i), 0.0, 0.0] for i in range(len(texts))]
 
     index = VectorIndex(embedding_fn=fake_embed)
-    docs = [
+    docs: list[IndexedDocument] = [
         {"content": "first", "section": "intro"},
         {"content": "second", "section": "body"},
         {"content": "third", "section": "end"},
@@ -164,7 +173,9 @@ def test_add_documents_validates_documents() -> None:
     index = VectorIndex(embedding_fn=fake_embed)
 
     with pytest.raises(ValueError, match="Document at index 1"):
-        index.add_documents([{"content": "valid"}, {"wrong_key": "invalid"}])
+        index.add_documents(
+            [{"content": "valid"}, {"wrong_key": "invalid"}]  # type: ignore[typeddict-item,typeddict-unknown-key]
+        )
 
     assert len(index) == 0
 

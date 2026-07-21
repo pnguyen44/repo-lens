@@ -1,6 +1,9 @@
 from unittest.mock import MagicMock
+
 import pytest
+
 from repo_lens.rag.hybrid_retriever import HybridRetriever
+from repo_lens.rag.types import IndexedDocument
 
 
 class TestInit:
@@ -21,7 +24,7 @@ class TestAddDocuments:
         index1 = MagicMock()
         index2 = MagicMock()
         retriever = HybridRetriever(index1, index2)
-        docs = [{"content": "hello"}, {"content": "world"}]
+        docs: list[IndexedDocument] = [{"content": "hello"}, {"content": "world"}]
 
         retriever.add_documents(docs)
 
@@ -32,7 +35,7 @@ class TestAddDocuments:
         index1 = MagicMock()
         index2 = MagicMock()
         retriever = HybridRetriever(index1, index2)
-        doc = {"content": "hello"}
+        doc: IndexedDocument = {"content": "hello"}
 
         retriever.add_document(doc)
 

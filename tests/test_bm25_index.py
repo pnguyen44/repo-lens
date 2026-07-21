@@ -1,7 +1,9 @@
 import pytest
-from repo_lens.rag.bm25_index import BM25Index
 
-DOCS = [
+from repo_lens.rag.bm25_index import BM25Index
+from repo_lens.rag.types import IndexedDocument
+
+DOCS: list[IndexedDocument] = [
     {"content": "Python is a popular programming language for data science"},
     {"content": "JavaScript powers most web applications and frontend frameworks"},
     {"content": "Python and JavaScript are the most popular languages in 2024"},
@@ -22,7 +24,7 @@ def loaded_index() -> BM25Index:
 class TestAddDocument:
     def test_stores_document(self) -> None:
         index = BM25Index()
-        doc = {"content": "hello world"}
+        doc: IndexedDocument = {"content": "hello world"}
         index.add_document(doc)
 
         assert len(index.documents) == 1
@@ -44,12 +46,12 @@ class TestAddDocument:
     def test_rejects_missing_content_key(self) -> None:
         index = BM25Index()
         with pytest.raises(ValueError):
-            index.add_document({"title": "no content key"})
+            index.add_document({"title": "no content key"})  # type: ignore[typeddict-item]
 
     def test_rejects_non_string_content(self) -> None:
         index = BM25Index()
         with pytest.raises(TypeError):
-            index.add_document({"content": 123})
+            index.add_document({"content": 123})  # type: ignore[typeddict-item]
 
 
 class TestSearch:

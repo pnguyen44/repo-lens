@@ -4,8 +4,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from repo_lens.agents.agent import Agent, AgentName
-from repo_lens.providers.chat_client import ChatResponse, StreamChunk, ToolCall
 from repo_lens.agents.orchestrator import Orchestrator
+from repo_lens.providers.chat_client import ChatResponse, StreamChunk, ToolCall
 
 
 def _make_stream(

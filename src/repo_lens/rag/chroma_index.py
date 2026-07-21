@@ -4,6 +4,7 @@ from typing import Any, Callable
 import chromadb
 
 from repo_lens.rag.base_vector_index import BaseVectorIndex
+from repo_lens.rag.types import IndexedDocument
 
 
 class ChromaVectorIndex(BaseVectorIndex):
@@ -35,10 +36,10 @@ class ChromaVectorIndex(BaseVectorIndex):
         """
         return hashlib.sha256(content.encode()).hexdigest()[:16]
 
-    def _extract_metadata(self, document: dict[str, Any]) -> dict[str, str]:
-        return {key: value for key, value in document.items() if key != "content"}
+    def _extract_metadata(self, document: IndexedDocument) -> dict[str, str]:
+        return {key: str(value) for key, value in document.items() if key != "content"}
 
-    def _store(self, vector: list[float], document: dict[str, Any]) -> None:
+    def _store(self, vector: list[float], document: IndexedDocument) -> None:
         content = document["content"]
 
         self._collection.upsert(
@@ -49,7 +50,7 @@ class ChromaVectorIndex(BaseVectorIndex):
         )
 
     def _store_batch(
-        self, vectors: list[list[float]], documents: list[dict[str, Any]]
+        self, vectors: list[list[float]], documents: list[IndexedDocument]
     ) -> None:
         contents = [doc["content"] for doc in documents]
         self._collection.upsert(
@@ -61,18 +62,24 @@ class ChromaVectorIndex(BaseVectorIndex):
 
     def _build_result_doc(
         self, content: str, metadata: dict[str, str]
-    ) -> dict[str, Any]:
-        doc: dict[str, Any] = {"content": content}
-        doc.update(metadata)
+    ) -> IndexedDocument:
+        doc: IndexedDocument = {"content": content}
+        doc.update(metadata)  # type: ignore[typeddict-item]
         return doc
 
-    def search(self, query: Any, k: int = 1) -> list[tuple[dict[str, Any], float]]:
+    def search(
+        self, *, query: Any, k: int = 1, repo: str | None = None
+    ) -> list[tuple[IndexedDocument, float]]:
         if self._collection.count() == 0:
             return []
 
         query_vector = self._resolve_query_vector(query)
 
-        results = self._collection.query(query_embeddings=[query_vector], n_results=k)
+        where = {"repo": repo} if repo is not None else None
+
+        results = self._collection.query(
+            query_embeddings=[query_vector], n_results=k, where=where
+        )
 
         return [
             (self._build_result_doc(doc, meta), dist)
@@ -83,7 +90,7 @@ class ChromaVectorIndex(BaseVectorIndex):
             )
         ]
 
-    def get_all_documents(self) -> list[dict[str, Any]]:
+    def get_all_documents(self) -> list[IndexedDocument]:
         if self._collection.count() == 0:
             return []
 

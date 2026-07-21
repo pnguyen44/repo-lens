@@ -2,6 +2,7 @@ from enum import Enum
 
 from repo_lens.agents.chat import Chat, OnToolInputCallback, OnToolStartCallback
 from repo_lens.core.mcp_client import MCPClient
+from repo_lens.core.repo_context import RepoContext
 from repo_lens.providers.chat_client import ChatClientProtocol
 from repo_lens.rag.hybrid_retriever import HybridRetriever
 from repo_lens.rag.reranker import Reranker
@@ -22,12 +23,16 @@ class Agent:
         self,
         task: str,
         *,
+        repo_context: RepoContext | None = None,
         on_tool_start: OnToolStartCallback | None = None,
         on_tool_input: OnToolInputCallback | None = None,
     ) -> str:
         self.chat.messages = []
         return await self.chat.run(
-            query=task, on_tool_start=on_tool_start, on_tool_input=on_tool_input
+            query=task,
+            repo_context=repo_context,
+            on_tool_start=on_tool_start,
+            on_tool_input=on_tool_input,
         )
 
 

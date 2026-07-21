@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from repo_lens.core.mcp_client import MCPClient
+from repo_lens.core.repo_context import RepoContext
 from repo_lens.rag.bm25_index import BM25Index
 from repo_lens.rag.hybrid_retriever import HybridRetriever
 from repo_lens.rag.indexer import fetch_repo_chunks
@@ -39,13 +40,11 @@ async def test_rag_end_to_end(mock_mcp_client, fake_embedder):
     vector_index = VectorIndex(embedding_fn=fake_embedder.generate_embeddings)
     bm25 = BM25Index()
     retriever = HybridRetriever(vector_index, bm25)
-    owner = "openshift-hyperfleet"
-    repo = "hyperfleet-api"
+    repo_context = RepoContext(owner="openshift-hyperfleet", repo="hyperfleet-api")
 
     docs = await fetch_repo_chunks(
         github_mcp=MagicMock(spec=MCPClient),
-        owner=owner,
-        repo=repo,
+        repo_context=repo_context,
     )
 
     retriever.add_documents(docs)
@@ -55,7 +54,7 @@ async def test_rag_end_to_end(mock_mcp_client, fake_embedder):
     query = "how does API work?"
     results = retriever.search(query_text=query, k=2)
     assert len(results) > 0
-    assert results[0][0]["repo"] == f"{owner}/{repo}"
+    assert results[0][0]["repo"] == repo_context.key
     assert len(retriever) == 3
     assert "section" in results[0][0]
 
@@ -67,8 +66,7 @@ async def test_fetch_repo_chunks_empty_readme():
     ):
         docs = await fetch_repo_chunks(
             github_mcp=MagicMock(spec=MCPClient),
-            owner="org",
-            repo="repo",
+            repo_context=RepoContext(owner="org", repo="repo"),
         )
         assert docs == []
 
@@ -90,8 +88,7 @@ async def test_fetch_repo_chunks_counts(readme, expected_chunks):
     ):
         docs = await fetch_repo_chunks(
             github_mcp=MagicMock(spec=MCPClient),
-            owner="org",
-            repo="repo",
+            repo_context=RepoContext(owner="org", repo="repo"),
         )
         assert len(docs) == expected_chunks
 
@@ -106,6 +103,5 @@ async def test_fetch_repo_chunks_propagates_fetch_error():
         with pytest.raises(ValueError, match="No README context found"):
             await fetch_repo_chunks(
                 github_mcp=MagicMock(spec=MCPClient),
-                owner="org",
-                repo="repo",
+                repo_context=RepoContext(owner="org", repo="repo"),
             )

@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import sys
 from contextlib import AsyncExitStack
 
 from rich import print
@@ -10,6 +11,7 @@ from repo_lens.app.runtime import App
 from repo_lens.core.config import Config, create_config
 from repo_lens.core.logging_config import configure_logging
 from repo_lens.core.mcp_client import MCPClient, create_github_client
+from repo_lens.core.repo_context import RepoContext
 from repo_lens.rag.indexer import fetch_repo_chunks
 
 logger = logging.getLogger(__name__)
@@ -17,6 +19,27 @@ logger = logging.getLogger(__name__)
 
 def print_status(label: str, message: str) -> None:
     print(f"\n[bold cyan]{label}:[/bold cyan] {message}")
+
+
+def flush_stdin() -> None:
+    """Discard keystrokes typed before interactive prompts are shown."""
+    try:
+        import termios
+
+        termios.tcflush(sys.stdin.fileno(), termios.TCIFLUSH)
+        return
+    except (ImportError, OSError, ValueError):
+        pass
+
+    # Fallback for environments without termios.
+    try:
+        import select
+
+        while select.select([sys.stdin], [], [], 0.0)[0]:
+            if not sys.stdin.read(1):
+                break
+    except (ImportError, OSError, ValueError):
+        pass
 
 
 async def validate_repo(github_mcp: MCPClient, owner: str, repo: str) -> bool:
@@ -53,24 +76,20 @@ async def resolve_repo(github_mcp: MCPClient, owner: str) -> str | None:
 
 
 async def select_repo(github_mcp: MCPClient, config: Config) -> tuple[str, str]:
+    flush_stdin()
     while True:
         owner = resolve_owner(config)
+        print_status(label="Org", message=owner)
         repo = await resolve_repo(github_mcp=github_mcp, owner=owner)
         if repo is None:
             continue
         return owner, repo
 
 
-async def ensure_indexed(
-    app: App,
-    owner: str,
-    repo: str,
-) -> None:
-    repo_key = f"{owner}/{repo}"
-
-    if not app.document_indexer.exits(key="repo", value=repo_key):
+async def ensure_indexed(app: App, repo_context: RepoContext) -> None:
+    if not app.document_indexer.exits(key="repo", value=repo_context.key):
         docs = await fetch_repo_chunks(
-            github_mcp=app.github_mcp, owner=owner, repo=repo
+            github_mcp=app.github_mcp, repo_context=repo_context
         )
         app.document_indexer.index(docs)
 
@@ -87,28 +106,26 @@ def cli_on_tool_input(partial_json: str) -> None:
     print(partial_json, end="", flush=True)
 
 
-async def chat_loop(
-    app: App,
-    owner: str,
-    repo: str,
-) -> None:
+async def chat_loop(app: App, repo_context: RepoContext) -> None:
     try:
         while True:
             user_input = input("> ")
             if user_input.lower() in ("quit", "exit"):
                 break
+
             if user_input.lower() == "/reindex":
-                repo_key = f"{owner}/{repo}"
-                print_status(label="Re-indexing", message=repo_key)
+                print_status(label="Re-indexing", message=repo_context.key)
                 docs = await fetch_repo_chunks(
                     github_mcp=app.github_mcp,
-                    owner=owner,
-                    repo=repo,
+                    repo_context=repo_context,
                 )
-                app.document_indexer.reindex(key="repo", value=repo_key, documents=docs)
-                print_status(label="Re-indexed", message=repo_key)
+                app.document_indexer.reindex(
+                    key="repo", value=repo_context.key, documents=docs
+                )
+                print_status(label="Re-indexed", message=repo_context.key)
                 continue
             await app.orchestrator.run(
+                repo_context=repo_context,
                 query=user_input,
                 on_delegate=cli_on_delegate,
                 on_text=lambda t: print(t, end="", flush=True),
@@ -140,20 +157,13 @@ async def main() -> None:
             logger.info("Loaded %d chunks from persistent storage.", count)
 
         owner, repo = await select_repo(github_mcp=github_mcp, config=config)
+        repo_context = RepoContext(repo=repo, owner=owner)
 
-        await ensure_indexed(
-            app=app,
-            owner=owner,
-            repo=repo,
-        )
+        await ensure_indexed(app=app, repo_context=repo_context)
 
-        print_status(label="Chatting about", message=f"{owner}/{repo}")
+        print_status(label="Chatting about", message=repo_context.key)
 
-        await chat_loop(
-            app=app,
-            owner=owner,
-            repo=repo,
-        )
+        await chat_loop(app=app, repo_context=repo_context)
 
 
 def cli() -> None:

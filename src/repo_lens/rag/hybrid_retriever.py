@@ -1,9 +1,10 @@
 from typing import Any
 
 from repo_lens.rag.protocols import SearchIndex
+from repo_lens.rag.types import IndexedDocument
 
 
-def validate_document(document: dict[str, Any], index: int | None = None) -> None:
+def validate_document(document: IndexedDocument, index: int | None = None) -> None:
     prefix = f"Document at index {index}: " if index is not None else ""
 
     if not isinstance(document, dict):
@@ -22,17 +23,22 @@ class HybridRetriever:
             raise ValueError("At least one index must be provided")
         self._indexes = list(indexes)
 
-    def add_document(self, document: dict[str, Any]) -> None:
+    def add_document(self, document: IndexedDocument) -> None:
         for index in self._indexes:
             index.add_document(document)
 
-    def add_documents(self, documents: list[dict[str, Any]]) -> None:
+    def add_documents(self, documents: list[IndexedDocument]) -> None:
         for index in self._indexes:
             index.add_documents(documents)
 
     def search(
-        self, query_text: str, k: int = 1, k_rrf: int = 60
-    ) -> list[tuple[dict[str, Any], float]]:
+        self,
+        *,
+        query_text: str,
+        k: int = 1,
+        k_rrf: int = 60,
+        repo: str | None = None,
+    ) -> list[tuple[IndexedDocument, float]]:
         if not isinstance(query_text, str):
             raise TypeError("Query text must be a string.")
         if k <= 0:
@@ -42,7 +48,8 @@ class HybridRetriever:
 
         # Query each index and collect ranked results
         all_results = [
-            index.search(query=query_text, k=k * 5) for index in self._indexes
+            index.search(query=query_text, k=k * 5, repo=repo)
+            for index in self._indexes
         ]
 
         doc_ranks: dict[str, dict[str, Any]] = {}
@@ -58,7 +65,7 @@ class HybridRetriever:
                 doc_ranks[match_key]["ranks"][idx] = rank
 
         # Compute RRF score for each document using calc_rrf_score
-        scored_docs: list[tuple[dict[str, Any], float]] = [
+        scored_docs: list[tuple[IndexedDocument, float]] = [
             (entry["doc_obj"], self._calc_rrf_score(entry["ranks"], k_rrf))
             for entry in doc_ranks.values()
         ]
@@ -75,7 +82,7 @@ class HybridRetriever:
         # Higher score = more relevant (appeared high across multiple indexes)
         return sum(1 / (k_rrf + rank) for rank in ranks if rank != float("inf"))
 
-    def reload(self, documents: list[dict[str, Any]]) -> None:
+    def reload(self, documents: list[IndexedDocument]) -> None:
         self.clear()
         self.add_documents(documents)
 
