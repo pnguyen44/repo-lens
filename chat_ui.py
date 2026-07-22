@@ -42,11 +42,14 @@ async def on_message(message: cl.Message) -> None:
         async with cl.Step(name=delegation_label(agent_name), type="tool") as step:
             step.output = task
 
+    before = app.token_tracker.summary()
     answer = await app.orchestrator.run(
         query=message.content, repo_context=repo_context, on_delegate=on_delegate
     )
 
     await cl.Message(content=answer).send()
+
+    await cl.Message(content=f"_Tokens: {app.format_tokens_for_turn(before)}_").send()
 
 
 @cl.on_chat_end  # type: ignore[misc]

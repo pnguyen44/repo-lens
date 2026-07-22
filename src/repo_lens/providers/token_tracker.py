@@ -1,9 +1,17 @@
-from typing import TypedDict, NotRequired
+from typing import NotRequired, TypedDict
 
 
 class UsagePayload(TypedDict):
     input_tokens: int
     output_tokens: int
+    cache_read_input_tokens: NotRequired[int]
+    cache_creation_input_tokens: NotRequired[int]
+
+
+class TokenCounts(TypedDict):
+    input_tokens: int
+    output_tokens: int
+    request_count: int
     cache_read_input_tokens: NotRequired[int]
     cache_creation_input_tokens: NotRequired[int]
 
@@ -29,13 +37,31 @@ class TokenTracker:
             ) + usage["cache_creation_input_tokens"]
         self.request_count += 1
 
-    def summary(self) -> dict[str, int]:
-        data = {
+    @staticmethod
+    def token_delta(before: TokenCounts, after: TokenCounts) -> TokenCounts:
+        delta: TokenCounts = {
+            "input_tokens": after["input_tokens"] - before["input_tokens"],
+            "output_tokens": after["output_tokens"] - before["output_tokens"],
+            "request_count": after["request_count"] - before["request_count"],
+        }
+        if "cache_read_input_tokens" in after:
+            delta["cache_read_input_tokens"] = after[
+                "cache_read_input_tokens"
+            ] - before.get("cache_read_input_tokens", 0)
+        if "cache_creation_input_tokens" in after:
+            delta["cache_creation_input_tokens"] = after[
+                "cache_creation_input_tokens"
+            ] - before.get("cache_creation_input_tokens", 0)
+        return delta
+
+    def summary(self) -> TokenCounts:
+        result: TokenCounts = {
             "input_tokens": self.input_tokens,
             "output_tokens": self.output_tokens,
-            "cache_read_input_tokens": self.cache_read_input_tokens,
-            "cache_creation_input_tokens": self.cache_creation_input_tokens,
             "request_count": self.request_count,
         }
-
-        return {k: v for k, v in data.items() if v is not None}
+        if self.cache_read_input_tokens is not None:
+            result["cache_read_input_tokens"] = self.cache_read_input_tokens
+        if self.cache_creation_input_tokens is not None:
+            result["cache_creation_input_tokens"] = self.cache_creation_input_tokens
+        return result

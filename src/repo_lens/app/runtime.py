@@ -6,7 +6,7 @@ from repo_lens.core.config import Config
 from repo_lens.core.mcp_client import MCPClient
 from repo_lens.core.repo_context import RepoContext
 from repo_lens.providers.provider import create_chat_client
-from repo_lens.providers.token_tracker import TokenTracker
+from repo_lens.providers.token_tracker import TokenCounts, TokenTracker
 from repo_lens.rag.bm25_index import BM25Index
 from repo_lens.rag.chroma_index import ChromaVectorIndex
 from repo_lens.rag.document_indexer import DocumentIndexer
@@ -82,9 +82,37 @@ class App:
             )
             self.document_indexer.index(docs)
 
-    def token_summary(self) -> dict[str, object]:
-        return {
-            "provider": self.config.provider,
-            "model": self.config.model,
-            **self.token_tracker.summary(),
-        }
+    def _format_provider_model(self) -> str:
+        return f"{self.config.provider}/{self.config.model}"
+
+    def format_token_counts(self, counts: TokenCounts) -> str:
+        parts = [
+            f"in {counts['input_tokens']}",
+            f"out {counts['output_tokens']}",
+        ]
+
+        if "cache_read_input_tokens" in counts:
+            parts.append(f"cache_read {counts['cache_read_input_tokens']}")
+        if "cache_creation_input_tokens" in counts:
+            parts.append(f"cache_create {counts['cache_creation_input_tokens']}")
+        return ", ".join(parts)
+
+    def format_token_summary(self, *, running_total: bool = False) -> str:
+        line = (
+            f"{self._format_provider_model()} | "
+            f"session: {self.format_token_counts(self.token_tracker.summary())}"
+        )
+
+        if running_total:
+            line += " (running total)"
+
+        return line
+
+    def format_tokens_for_turn(self, before: TokenCounts) -> str:
+        after = self.token_tracker.summary()
+        turn = TokenTracker.token_delta(before=before, after=after)
+        return (
+            f"{self._format_provider_model()} | "
+            f"turn: {self.format_token_counts(turn)} | "
+            f"session: {self.format_token_counts(after)}"
+        )

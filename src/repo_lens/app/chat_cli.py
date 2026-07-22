@@ -116,6 +116,7 @@ async def chat_loop(app: App, repo_context: RepoContext) -> None:
                 )
                 print_status(label="Re-indexed", message=repo_context.key)
                 continue
+            before = app.token_tracker.summary()
             await app.orchestrator.run(
                 repo_context=repo_context,
                 query=user_input,
@@ -125,10 +126,17 @@ async def chat_loop(app: App, repo_context: RepoContext) -> None:
                 on_tool_input=cli_on_tool_input,
             )
             print()
+            print_status(
+                label="Tokens",
+                message=app.format_tokens_for_turn(before),
+            )
     except KeyboardInterrupt:
         print("\nexiting")
     finally:
-        print_status(label="Tokens", message=str(app.token_summary()))
+        print_status(
+            label="Tokens",
+            message=app.format_token_summary(running_total=True),
+        )
 
 
 async def main() -> None:
