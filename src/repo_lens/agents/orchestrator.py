@@ -39,6 +39,10 @@ Available agents:
 Rules:
 - Always delegate to an agent. Do not answer directly.
 - After receiving agent results, synthesize a final answer for the user.
+- When citing docs or files, use full GitHub URLs only
+  (`https://github.com/{{owner}}/{{repo}}/blob/main/...`).
+- Prefer source URLs from specialist results / retrieval titles.
+- Never use repo-relative paths (`docs/foo.md`) or bare `[Section]` links.
 """
 
 

@@ -60,7 +60,12 @@ def create_rag_agent(
 ) -> Agent:
     chat = Chat(
         chat_client=chat_client,
-        system_prompt="You answer questions about codebases using the retrieved context.",
+        system_prompt=(
+            "You answer questions about codebases using the retrieved context. "
+            "When you reference a section or file, link with the full GitHub URL "
+            "from the source title (https://github.com/...). "
+            "Do not use relative paths or markdown links without an absolute URL."
+        ),
         hybrid_retriever=hybrid_retriever,
         reranker=reranker,
         web_search=False,
