@@ -26,3 +26,31 @@ services:
         condition: service_healthy
     stdin_open: true
     tty: true
+
+  app-ui:
+    build: .
+    command:
+      [
+        "chainlit",
+        "run",
+        "chat_ui.py",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8001",
+        "--headless",
+      ]
+    ports:
+      - "8001:8001"
+    env_file: .env
+    environment:
+      - CHROMA_HOST=chroma
+      - CHROMA_PORT=8000
+    volumes:
+      - ./src:/app/src
+      - ./chat_ui.py:/app/chat_ui.py
+      - ./chainlit.md:/app/chainlit.md
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      chroma:
+        condition: service_healthy

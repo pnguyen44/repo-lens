@@ -1,6 +1,6 @@
 # repo-lens
 
-AI-powered CLI for chatting about GitHub repositories. Uses RAG (Retrieval-Augmented Generation) to index repo content and answer questions with relevant context.
+AI-powered CLI and Chainlit UI for chatting about GitHub repositories. Uses RAG (Retrieval-Augmented Generation) to index repo content and answer questions with relevant context.
 
 ## Table of Contents
 
@@ -9,6 +9,7 @@ AI-powered CLI for chatting about GitHub repositories. Uses RAG (Retrieval-Augme
 - [Installation](#installation)
 - [Configuration](#configuration)
 - [Running the App](#running-the-app)
+- [Chainlit UI](#chainlit-ui)
 - [RAG Pipeline](#rag-pipeline)
 - [RAG Evaluation](#rag-evaluation)
 - [Prompt Eval Tool](#prompt-eval-tool)
@@ -53,6 +54,11 @@ At minimum, you need:
 
 See `.env.example` for all available options and defaults.
 
+For the Chainlit UI, also set:
+
+- `DEFAULT_ORG` — GitHub org/owner for the active repo
+- `DEFAULT_REPO` — repository name (no interactive picker yet)
+
 ## Running the App
 
 The app runs as a multi-container stack via Docker Compose: the CLI app connects to a dedicated ChromaDB server for persistent vector storage.
@@ -68,6 +74,29 @@ To stop all containers:
 ```bash
 make down
 ```
+
+## Chainlit UI
+
+A web chat UI over the same `App` / orchestrator stack as the CLI. Entry point is `chat_ui.py`.
+
+Chroma uses port `8000`; Chainlit uses `8001` so they do not clash.
+
+**Local (uv):**
+
+```bash
+make chroma
+make run-ui
+```
+
+Open [http://localhost:8001](http://localhost:8001).
+
+**Docker (same image as the CLI, different command):**
+
+```bash
+make run-ui-docker
+```
+
+Then open [http://localhost:8001](http://localhost:8001). Stop with `make down`.
 
 ## RAG Pipeline
 
