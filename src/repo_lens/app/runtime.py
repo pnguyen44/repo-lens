@@ -4,6 +4,7 @@ from repo_lens.agents.agent import AgentName, create_github_agent, create_rag_ag
 from repo_lens.agents.orchestrator import Orchestrator
 from repo_lens.core.config import Config
 from repo_lens.core.mcp_client import MCPClient
+from repo_lens.core.repo_context import RepoContext
 from repo_lens.providers.provider import create_chat_client
 from repo_lens.providers.token_tracker import TokenTracker
 from repo_lens.rag.bm25_index import BM25Index
@@ -11,6 +12,7 @@ from repo_lens.rag.chroma_index import ChromaVectorIndex
 from repo_lens.rag.document_indexer import DocumentIndexer
 from repo_lens.rag.embeddings import InputType, VoyageEmbedder
 from repo_lens.rag.hybrid_retriever import HybridRetriever
+from repo_lens.rag.indexer import fetch_repo_chunks
 from repo_lens.rag.reranker import VoyageReranker
 
 CHROMA_COLLECTION_NAME = "repo_chunks"
@@ -72,6 +74,13 @@ class App:
             agents={AgentName.GITHUB: github_agent, AgentName.RAG: rag_agent},
             chat_client=orchestrator_chat_client,
         )
+
+    async def ensure_indexed(self, repo_context: RepoContext) -> None:
+        if not self.document_indexer.exits(key="repo", value=repo_context.key):
+            docs = await fetch_repo_chunks(
+                github_mcp=self.github_mcp, repo_context=repo_context
+            )
+            self.document_indexer.index(docs)
 
     def token_summary(self) -> dict[str, object]:
         return {

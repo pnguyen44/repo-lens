@@ -80,12 +80,19 @@ class Orchestrator:
             agents="\n".join(agent_lines)
         )
 
-    def _stream(self, on_text: OnTextCallback | None = None) -> tuple[Any, str]:
+    def _stream(
+        self,
+        on_text: OnTextCallback | None = None,
+        repo_context: RepoContext | None = None,
+    ) -> tuple[Any, str]:
+        system = self.system_prompt + (
+            repo_context.prompt_suffix() if repo_context else ""
+        )
         text = ""
         with self.chat_client.chat_stream(
             messages=self.messages,
             tools=self.tools,
-            system=self.system_prompt,
+            system=system,
             web_search=False,
         ) as stream:
             for chunk in stream:
@@ -114,7 +121,7 @@ class Orchestrator:
         delegations = 0
 
         while True:
-            response, text = self._stream(on_text=on_text)
+            response, text = self._stream(on_text=on_text, repo_context=repo_context)
 
             if response.stop_reason != "tool_use":
                 return text

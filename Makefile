@@ -1,4 +1,4 @@
-.PHONY: build chroma run down clean-chroma install test e2e test-all lint prompt-eval rag-eval index
+.PHONY: build chroma run run-ui down clean-chroma install test e2e test-all lint prompt-eval rag-eval index
 
 build:
 	docker compose build
@@ -10,6 +10,9 @@ run:
 	docker compose down
 	docker compose up -d chroma
 	docker compose run --rm app
+
+run-ui:
+	PYTHONPATH=src uv run chainlit run chat_ui.py --port 8001
 
 down:
 	docker compose down

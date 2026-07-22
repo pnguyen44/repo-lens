@@ -86,14 +86,6 @@ async def select_repo(github_mcp: MCPClient, config: Config) -> tuple[str, str]:
         return owner, repo
 
 
-async def ensure_indexed(app: App, repo_context: RepoContext) -> None:
-    if not app.document_indexer.exits(key="repo", value=repo_context.key):
-        docs = await fetch_repo_chunks(
-            github_mcp=app.github_mcp, repo_context=repo_context
-        )
-        app.document_indexer.index(docs)
-
-
 async def cli_on_delegate(agent_name: str, task: str) -> None:
     print_status(label=delegation_label(agent_name), message=task)
 
@@ -159,7 +151,7 @@ async def main() -> None:
         owner, repo = await select_repo(github_mcp=github_mcp, config=config)
         repo_context = RepoContext(repo=repo, owner=owner)
 
-        await ensure_indexed(app=app, repo_context=repo_context)
+        await app.ensure_indexed(repo_context=repo_context)
 
         print_status(label="Chatting about", message=repo_context.key)
 

@@ -114,11 +114,14 @@ class Chat:
         on_tool_input: OnToolInputCallback | None = None,
     ) -> tuple[Any, str]:
         call_start = time.perf_counter()
+        system = (self.system_prompt or "") + (
+            self.repo_context.prompt_suffix() if self.repo_context else ""
+        )
         text = ""
         with self.chat_client.chat_stream(
             messages=self.messages,
             tools=self.tools,
-            system=self.system_prompt,
+            system=system,
             web_search=self.web_search,
             tool_choice=tool_choice,
         ) as stream:
