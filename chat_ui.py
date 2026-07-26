@@ -1,4 +1,5 @@
 import logging
+import os
 import re
 
 import chainlit as cl
@@ -13,6 +14,29 @@ from repo_lens.providers.chat_client import StreamError
 logger = logging.getLogger(__name__)
 
 _RETRY_SECONDS = re.compile(r"retry in\s+(\d+(?:\.\d+)?)\s*s", re.IGNORECASE)
+
+
+def _validate_auth_env() -> None:
+    if not os.environ.get("APP_USER") or not os.environ.get("APP_PASS"):
+        raise RuntimeError(
+            "APP_USER and APP_PASS must be set and non-empty in the environment"
+        )
+
+
+_validate_auth_env()
+
+
+@cl.password_auth_callback  # type: ignore[misc]
+def auth_callback(username: str, password: str) -> cl.User | None:
+    expected_user = os.environ.get("APP_USER", "")
+    expected_pass = os.environ.get("APP_PASS", "")
+    if not username or not password:
+        return None
+    if not expected_user or not expected_pass:
+        return None
+    if username == expected_user and password == expected_pass:
+        return cl.User(identifier=username)
+    return None
 
 
 def _user_facing_stream_error(detail: str) -> str:
