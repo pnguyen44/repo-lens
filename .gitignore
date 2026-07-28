@@ -18,5 +18,6 @@ data/
 
 # Chainlit auto-generated config
 .chainlit
+!.chainlit/config.toml
 !.chainlit/translations/
 !.chainlit/translations/en-US.json

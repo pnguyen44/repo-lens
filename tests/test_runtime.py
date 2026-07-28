@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock
 
 from repo_lens.app.runtime import App
-from repo_lens.core.config import Config
+from repo_lens.core.config import Config, VectorStore
 from repo_lens.providers.token_tracker import TokenTracker
 
 
@@ -17,6 +17,9 @@ def _make_app(*, provider: str = "gemini", model: str = "gemini-2.5-flash") -> A
         voyage_rerank_model="rerank-2",
         chroma_host="localhost",
         chroma_port=8000,
+        vector_store=VectorStore.QDRANT,
+        qdrant_url=None,
+        qdrant_api_key=None,
     )
     app.token_tracker = TokenTracker()
     app.github_mcp = MagicMock()

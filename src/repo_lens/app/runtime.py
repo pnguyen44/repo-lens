@@ -1,21 +1,47 @@
+import logging
+from typing import Callable
+
 from voyageai.client import Client as VoyageClient
 
 from repo_lens.agents.agent import AgentName, create_github_agent, create_rag_agent
 from repo_lens.agents.orchestrator import Orchestrator
-from repo_lens.core.config import Config
+from repo_lens.core.config import Config, VectorStore
 from repo_lens.core.mcp_client import MCPClient
 from repo_lens.core.repo_context import RepoContext
 from repo_lens.providers.provider import create_chat_client
 from repo_lens.providers.token_tracker import TokenCounts, TokenTracker
+from repo_lens.rag.base_vector_index import BaseVectorIndex
 from repo_lens.rag.bm25_index import BM25Index
 from repo_lens.rag.chroma_index import ChromaVectorIndex
 from repo_lens.rag.document_indexer import DocumentIndexer
 from repo_lens.rag.embeddings import InputType, VoyageEmbedder
 from repo_lens.rag.hybrid_retriever import HybridRetriever
 from repo_lens.rag.indexer import fetch_repo_chunks
+from repo_lens.rag.qdrant_index import QdrantVectorIndex
 from repo_lens.rag.reranker import VoyageReranker
 
-CHROMA_COLLECTION_NAME = "repo_chunks"
+logger = logging.getLogger(__name__)
+
+COLLECTION_NAME = "repo_lens"
+
+
+def _create_vector_index(
+    config: Config, embedding_fn: Callable[[list[str]], list[list[float]]]
+) -> BaseVectorIndex:
+    if config.vector_store == VectorStore.QDRANT:
+        return QdrantVectorIndex(
+            collection_name=COLLECTION_NAME,
+            embedding_fn=embedding_fn,
+            url=config.qdrant_url or "",
+            api_key=config.qdrant_api_key or "",
+        )
+
+    return ChromaVectorIndex(
+        collection_name=COLLECTION_NAME,
+        embedding_fn=embedding_fn,
+        host=config.chroma_host,
+        port=config.chroma_port,
+    )
 
 
 class App:
@@ -24,25 +50,27 @@ class App:
         self.github_mcp = github_mcp
         self.token_tracker = TokenTracker()
         self.vector_index, self.retriever = self._create_retriever_stack()
+        logger.info("Using vector store: %s", self.config.vector_store.value)
         self.document_indexer = DocumentIndexer(
-            vector_index=self.vector_index, retriever=self.retriever
+            vector_index=self.vector_index,  # type: ignore[arg-type]
+            retriever=self.retriever,
         )
         self.orchestrator = self._create_orchestrator()
 
-    def _create_retriever_stack(self) -> tuple[ChromaVectorIndex, HybridRetriever]:
+    def _create_retriever_stack(self) -> tuple[BaseVectorIndex, HybridRetriever]:
         embedder = VoyageEmbedder(VoyageClient(), model=self.config.voyage_embed_model)
 
-        vector_index = ChromaVectorIndex(
-            collection_name=CHROMA_COLLECTION_NAME,
-            embedding_fn=lambda texts: embedder.generate_embeddings(
-                texts, input_type=InputType.DOCUMENT
-            ),
-            host=self.config.chroma_host,
-            port=self.config.chroma_port,
+        def embedding_fn(texts: list[str]) -> list[list[float]]:
+            return embedder.generate_embeddings(
+                texts=texts, input_type=InputType.DOCUMENT
+            )
+
+        vector_index = _create_vector_index(
+            config=self.config, embedding_fn=embedding_fn
         )
 
         bm25 = BM25Index()
-        retriever = HybridRetriever(vector_index, bm25)
+        retriever = HybridRetriever(vector_index, bm25)  # type: ignore[arg-type]
 
         return vector_index, retriever
 

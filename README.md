@@ -58,10 +58,19 @@ For the Chainlit UI, also set:
 
 - `DEFAULT_ORG` — GitHub org/owner for the active repo
 - `DEFAULT_REPO` — repository name (no interactive picker yet)
+- `APP_USER` — username for the login page
+- `APP_PASS` — password for the login page
+- `CHAINLIT_AUTH_SECRET` — secret for signing auth tokens (generate with `openssl rand -base64 32`)
+
+Vector store configuration:
+
+- `VECTOR_STORE` — `qdrant` (default) or `chroma`
+- `QDRANT_URL` — Qdrant endpoint (e.g. `http://localhost:6333` for local, or your Qdrant Cloud URL)
+- `QDRANT_API_KEY` — Qdrant Cloud API key (empty for local)
 
 ## Running the App
 
-The app runs as a multi-container stack via Docker Compose: the CLI app connects to a dedicated ChromaDB server for persistent vector storage.
+The app runs as a multi-container stack via Docker Compose: the app connects to Qdrant (vector search) and ChromaDB (legacy fallback) for persistent storage. Set `VECTOR_STORE=qdrant` (default) or `VECTOR_STORE=chroma` to choose the backend.
 
 ```bash
 make run
@@ -77,9 +86,9 @@ make down
 
 ## Chainlit UI
 
-A web chat UI over the same `App` / orchestrator stack as the CLI. Entry point is `chat_ui.py`.
+A web chat UI over the same `App` / orchestrator stack as the CLI. Entry point is `chat_ui.py`. Protected by username/password login (set `APP_USER` and `APP_PASS` in `.env`).
 
-Chroma uses port `8000`; Chainlit uses `8001` so they do not clash.
+Qdrant uses port `6333`; Chainlit uses `8001` so they do not clash.
 
 **Local (uv):**
 

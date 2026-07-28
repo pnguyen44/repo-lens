@@ -15,7 +15,7 @@ run-ui:
 	PYTHONPATH=src uv run chainlit run chat_ui.py --port 8001 -w
 
 run-ui-docker:
-	docker compose up --build chroma app-ui
+	docker compose up --build qdrant chroma app-ui
 
 down:
 	docker compose down

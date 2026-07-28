@@ -1,8 +1,15 @@
 import os
-from dotenv import load_dotenv
 from dataclasses import dataclass
+from enum import StrEnum
+
+from dotenv import load_dotenv
 
 load_dotenv()
+
+
+class VectorStore(StrEnum):
+    QDRANT = "qdrant"
+    CHROMA = "chroma"
 
 
 @dataclass
@@ -16,6 +23,9 @@ class Config:
     voyage_rerank_model: str
     chroma_host: str
     chroma_port: int
+    vector_store: VectorStore
+    qdrant_url: str | None
+    qdrant_api_key: str | None
 
 
 def create_config() -> Config:
@@ -28,6 +38,9 @@ def create_config() -> Config:
     voyage_rerank_model = os.environ.get("VOYAGE_RERANK_MODEL", "rerank-2")
     chroma_host = os.environ.get("CHROMA_HOST", "localhost")
     chroma_port = int(os.environ.get("CHROMA_PORT", "8000"))
+    vector_store = VectorStore(os.environ.get("VECTOR_STORE", "qdrant"))
+    qdrant_url = os.environ.get("QDRANT_URL") or None
+    qdrant_api_key = os.environ.get("QDRANT_API_KEY") or None
 
     if provider == "anthropic" and not os.environ.get("ANTHROPIC_API_KEY", ""):
         raise ValueError("ANTHROPIC_API_KEY is missing a value. Update .env")
@@ -48,4 +61,7 @@ def create_config() -> Config:
         voyage_rerank_model=voyage_rerank_model,
         chroma_host=chroma_host,
         chroma_port=chroma_port,
+        vector_store=vector_store,
+        qdrant_url=qdrant_url,
+        qdrant_api_key=qdrant_api_key,
     )

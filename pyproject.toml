@@ -11,6 +11,7 @@ dependencies = [
     "mcp>=1.27.1",
     "numpy>=2.4.6",
     "python-dotenv",
+    "qdrant-client>=1.18.0",
     "rich",
     "structlog>=26.1.0",
     "voyageai>=0.3.7",

@@ -47,7 +47,7 @@ Rules:
 
 
 def delegation_label(agent_name: str) -> str:
-    return f"Delegating to {agent_name} agent"
+    return f"delegating to {agent_name} agent"
 
 
 class OnDelegateCallback(Protocol):
