@@ -4,6 +4,6 @@ An AI-powered tool for exploring and understanding GitHub repositories.
 
 ## What it can do
 
-- **Ask questions about code** — uses RAG to search indexed repo content and answer with source citations
-- **Query GitHub** — fetch issues, PRs, repo metadata through natural language
-- **Multi-agent orchestration** — a planner agent breaks down complex questions and delegates to specialist agents
+- **Hybrid RAG search** — combines vector similarity (VoyageAI embeddings) and BM25 keyword matching with Reciprocal Rank Fusion, then reranks results before answering
+- **Query GitHub** — fetch issues, PRs, repo metadata via GitHub MCP tools through natural language
+- **Multi-agent orchestration** — a planner–delegate system routes queries to specialist agents (RAG, GitHub) and synthesizes their results into a single response

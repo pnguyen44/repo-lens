@@ -95,7 +95,7 @@ reaction_on_message_received = false
 
 [UI]
 # Name of the assistant.
-name = "Assistant"
+name = "repo-lens"
 
 # default_theme = "dark"
 
@@ -117,7 +117,7 @@ name = "Assistant"
 confirm_new_chat = true
 
 # Description of the assistant. This is used for HTML tags.
-# description = ""
+description = "AI-powered chat for exploring GitHub repositories. Uses hybrid RAG search and multi-agent orchestration to answer questions grounded in repo documentation."
 
 # Chain of Thought (CoT) display mode. Can be "hidden", "tool_call" or "full".
 cot = "full"
