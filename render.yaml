@@ -1,0 +1,44 @@
+services:
+  - type: web
+    name: repo-lens
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerCommand: chainlit run chat_ui.py --host 0.0.0.0 --port 8001 --headless
+    envVars:
+      - key: INSTALL_DOCKER
+        value: "false"
+      - key: PORT
+        value: "8001"
+      - key: VECTOR_STORE
+        value: qdrant
+      - key: QDRANT_URL
+        sync: false
+      - key: QDRANT_API_KEY
+        sync: false
+      - key: PROVIDER
+        value: gemini
+      - key: MODEL
+        value: gemini-2.5-flash
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: VOYAGE_API_KEY
+        sync: false
+      - key: DEFAULT_ORG
+        value: openshift-hyperfleet
+      - key: DEFAULT_REPO
+        value: hyperfleet-api
+      - key: VOYAGE_EMBED_MODEL
+        value: voyage-3-large
+      - key: VOYAGE_RERANK_MODEL
+        value: rerank-2
+      - key: APP_USER
+        sync: false
+      - key: APP_PASS
+        sync: false
+      - key: CHAINLIT_AUTH_SECRET
+        sync: false
+      - key: LOG_LEVEL
+        value: INFO
