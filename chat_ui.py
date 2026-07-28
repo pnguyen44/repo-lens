@@ -64,6 +64,9 @@ async def on_chat_start() -> None:
     await github_mcp.connect()
     cl.user_session.set("github_mcp", github_mcp)
 
+    msg = cl.Message(content="Indexing repository...")
+    await msg.send()
+
     owner = config.default_org
     repo = config.default_repo
     if owner is None or repo is None:
@@ -78,9 +81,10 @@ async def on_chat_start() -> None:
     app.document_indexer.load_from_store()
     await app.ensure_indexed(repo_context=repo_context)
 
-    await cl.Message(
-        content=f"Chatting about `{repo_context.key}`. Ask a question about this repo."
-    ).send()
+    msg.content = (
+        f"Chatting about `{repo_context.key}`. Ask a question about this repo."
+    )
+    await msg.update()
 
 
 @cl.on_message  # type: ignore[misc]
