@@ -77,23 +77,30 @@ class MCPClient:
         await self.cleanup()
 
 
+def _docker_available() -> bool:
+    import shutil
+
+    return shutil.which("docker") is not None
+
+
 def create_github_client(github_token: str) -> MCPClient:
-    args = [
-        "run",
-        "-i",
-        "--rm",
-        "-e",
-        "GITHUB_PERSONAL_ACCESS_TOKEN",
-    ]
+    env = {"GITHUB_PERSONAL_ACCESS_TOKEN": github_token}
 
-    log_level = os.getenv("LOG_LEVEL", "INFO").upper()
-    if log_level in ("WARNING", "ERROR", "CRITICAL"):
-        args.extend(["-e", "GITHUB_LOG_FILE=/dev/null"])
+    if _docker_available():
+        args = [
+            "run",
+            "-i",
+            "--rm",
+            "-e",
+            "GITHUB_PERSONAL_ACCESS_TOKEN",
+        ]
 
-    args.append("ghcr.io/github/github-mcp-server")
+        log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+        if log_level in ("WARNING", "ERROR", "CRITICAL"):
+            args.extend(["-e", "GITHUB_LOG_FILE=/dev/null"])
 
-    return MCPClient(
-        command="docker",
-        args=args,
-        env={"GITHUB_PERSONAL_ACCESS_TOKEN": github_token},
-    )
+        args.append("ghcr.io/github/github-mcp-server")
+
+        return MCPClient(command="docker", args=args, env=env)
+
+    return MCPClient(command="github-mcp-server", args=["stdio"], env=env)

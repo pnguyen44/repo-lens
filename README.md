@@ -107,6 +107,20 @@ make run-ui-docker
 
 Then open [http://localhost:8001](http://localhost:8001). Stop with `make down`.
 
+## Deployment
+
+Deployed on [Render](https://render.com) (free tier) with [Qdrant Cloud](https://cloud.qdrant.io) for persistent vector storage.
+
+**To deploy your own instance:**
+
+1. Fork this repo
+2. Create a free Qdrant Cloud cluster
+3. On Render, create a new Blueprint and connect the repo
+4. Fill in the secrets in the Render dashboard (API keys, auth credentials)
+5. Deploy — the app indexes the repo on first boot
+
+See `render.yaml` for the full service configuration.
+
 ## RAG Pipeline
 
 Indexes repository READMEs and uses hybrid search (vector + BM25) to provide relevant context when answering questions. Fetches content via GitHub MCP, chunks it, embeds with VoyageAI, and stores in a vector index.
