@@ -36,6 +36,12 @@ class QdrantVectorIndex(BaseVectorIndex):
                 vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE),
             )
 
+        self._client.create_payload_index(
+            collection_name=collection_name,
+            field_name="repo",
+            field_schema="keyword",
+        )
+
     @staticmethod
     def _doc_id(content: str) -> str:
         return str(uuid.uuid5(uuid.NAMESPACE_DNS, content))
