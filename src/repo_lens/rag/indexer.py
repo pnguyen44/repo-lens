@@ -1,7 +1,8 @@
 import asyncio
+import json
 import logging
 
-from mcp.types import EmbeddedResource, TextResourceContents
+from mcp.types import EmbeddedResource, TextContent, TextResourceContents
 from voyageai.client import Client as VoyageClient
 
 from repo_lens.core.config import create_config
@@ -19,55 +20,107 @@ logger = logging.getLogger(__name__)
 NUM_RESULTS = 2
 PREVIEW_LENGTH = 200
 
+EXCLUDE_FILES = {"CLAUDE.md", "AGENTS.md"}
+
+
+class RepoContentFetcher:
+    def __init__(self, mcp_client: MCPClient, repo_context: RepoContext) -> None:
+        self.mcp_client = mcp_client
+        self.repo_context = repo_context
+
+    async def fetch_file(self, path: str) -> str:
+        text = ""
+
+        result = await self.mcp_client.call_tool(
+            "get_file_contents",
+            {
+                "owner": self.repo_context.owner,
+                "repo": self.repo_context.repo,
+                "path": path,
+            },
+        )
+
+        for item in result.content:
+            if isinstance(item, EmbeddedResource) and isinstance(
+                item.resource, TextResourceContents
+            ):
+                text = item.resource.text
+
+        if not text:
+            raise ValueError(
+                f"No context found for {self.repo_context.owner}/{self.repo_context.repo} on {path}"
+            )
+
+        return text
+
+    async def fetch_md_file_list(self) -> list[str]:
+        return await self._walk_dir("")
+
+    async def _walk_dir(self, path: str) -> list[str]:
+        result = await self.mcp_client.call_tool(
+            "get_file_contents",
+            {
+                "owner": self.repo_context.owner,
+                "repo": self.repo_context.repo,
+                "path": path,
+            },
+        )
+
+        entries = []
+
+        for item in result.content:
+            if isinstance(item, TextContent):
+                entries = json.loads(item.text)
+
+        md_files: list[str] = []
+
+        for entry in entries:
+            if entry["type"] == "file" and entry["path"].endswith(".md"):
+                if entry["path"].split("/")[-1] not in EXCLUDE_FILES:
+                    md_files.append(entry["path"])
+            elif entry["type"] == "dir":
+                md_files.extend(await self._walk_dir(entry["path"]))
+
+        return md_files
+
+    async def fetch_repo_chunks(self) -> list[IndexedDocument]:
+        repo_name = self.repo_context.key
+        logger.info("Indexing %s", repo_name)
+
+        file_list = await self.fetch_md_file_list()
+
+        documents: list[IndexedDocument] = []
+
+        for file in file_list:
+            text = await self.fetch_file(file)
+
+            chunks = [c for c in chunk_by_section(text) if c.strip()]
+
+            if not chunks:
+                continue
+
+            for chunk in chunks:
+                section = chunk.split("\n", 1)[0].lstrip("# ").strip()
+                anchor = to_github_anchor(section)
+                url = (
+                    f"https://github.com/{self.repo_context.owner}/{self.repo_context.repo}"
+                    f"/blob/main/{file}#{anchor}"
+                )
+
+                documents.append(
+                    {
+                        "content": chunk,
+                        "repo": repo_name,
+                        "section": section,
+                        "url": url,
+                    }
+                )
+
+        return documents
+
 
 def to_github_anchor(section: str) -> str:
     return section.lower().replace(" ", "-").replace(".", "").replace("/", "")
-
-
-async def fetch_readme(mcp_client: MCPClient, owner: str, repo: str) -> str:
-    """Fetch a repo's README.md content via GitHub MCP."""
-    result = await mcp_client.call_tool(
-        "get_file_contents", {"owner": owner, "repo": repo, "path": "README.md"}
-    )
-    readme_text = ""
-    for item in result.content:
-        if isinstance(item, EmbeddedResource) and isinstance(
-            item.resource, TextResourceContents
-        ):
-            readme_text = item.resource.text
-
-    if not readme_text:
-        raise ValueError(f"No README context found for {owner}/{repo}")
-    return readme_text
-
-
-async def fetch_repo_chunks(
-    github_mcp: MCPClient, repo_context: RepoContext
-) -> list[IndexedDocument]:
-    readme = await fetch_readme(
-        mcp_client=github_mcp, owner=repo_context.owner, repo=repo_context.repo
-    )
-    chunks = [c for c in chunk_by_section(readme) if c.strip()]
-
-    if not chunks:
-        return []
-
-    repo_name = repo_context.key
-    logger.info("Indexing %s", repo_name)
-
-    documents: list[IndexedDocument] = []
-    for chunk in chunks:
-        section = chunk.split("\n", 1)[0].lstrip("# ").strip()
-        anchor = to_github_anchor(section)
-        url = (
-            f"https://github.com/{repo_context.owner}/{repo_context.repo}"
-            f"/blob/main/README.md#{anchor}"
-        )
-        documents.append(
-            {"content": chunk, "repo": repo_name, "section": section, "url": url}
-        )
-
-    return documents
 
 
 async def main() -> None:
@@ -86,10 +139,8 @@ async def main() -> None:
     retriever = HybridRetriever(vector_index, bm25)
 
     async with create_github_client(config.github_token) as mcp_client:
-        documents = await fetch_repo_chunks(
-            github_mcp=mcp_client,
-            repo_context=repo_context,
-        )
+        fetcher = RepoContentFetcher(mcp_client=mcp_client, repo_context=repo_context)
+        documents = await fetcher.fetch_repo_chunks()
 
     count = len(documents)
 

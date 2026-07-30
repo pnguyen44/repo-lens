@@ -12,7 +12,7 @@ from repo_lens.core.config import Config, create_config
 from repo_lens.core.logging_config import configure_logging
 from repo_lens.core.mcp_client import MCPClient, create_github_client
 from repo_lens.core.repo_context import RepoContext
-from repo_lens.rag.indexer import fetch_repo_chunks
+from repo_lens.rag.indexer import RepoContentFetcher
 
 logger = logging.getLogger(__name__)
 
@@ -107,10 +107,11 @@ async def chat_loop(app: App, repo_context: RepoContext) -> None:
 
             if user_input.lower() == "/reindex":
                 print_status(label="Re-indexing", message=repo_context.key)
-                docs = await fetch_repo_chunks(
-                    github_mcp=app.github_mcp,
+                fetcher = RepoContentFetcher(
+                    mcp_client=app.github_mcp,
                     repo_context=repo_context,
                 )
+                docs = await fetcher.fetch_repo_chunks()
                 app.document_indexer.reindex(
                     key="repo", value=repo_context.key, documents=docs
                 )

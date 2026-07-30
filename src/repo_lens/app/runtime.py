@@ -16,7 +16,7 @@ from repo_lens.rag.chroma_index import ChromaVectorIndex
 from repo_lens.rag.document_indexer import DocumentIndexer
 from repo_lens.rag.embeddings import InputType, VoyageEmbedder
 from repo_lens.rag.hybrid_retriever import HybridRetriever
-from repo_lens.rag.indexer import fetch_repo_chunks
+from repo_lens.rag.indexer import RepoContentFetcher
 from repo_lens.rag.qdrant_index import QdrantVectorIndex
 from repo_lens.rag.reranker import VoyageReranker
 
@@ -105,9 +105,10 @@ class App:
 
     async def ensure_indexed(self, repo_context: RepoContext) -> None:
         if not self.document_indexer.exits(key="repo", value=repo_context.key):
-            docs = await fetch_repo_chunks(
-                github_mcp=self.github_mcp, repo_context=repo_context
+            fetcher = RepoContentFetcher(
+                mcp_client=self.github_mcp, repo_context=repo_context
             )
+            docs = await fetcher.fetch_repo_chunks()
             self.document_indexer.index(docs)
 
     def _format_provider_model(self) -> str:
