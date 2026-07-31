@@ -19,6 +19,7 @@ from repo_lens.rag.hybrid_retriever import HybridRetriever
 from repo_lens.rag.indexer import RepoContentFetcher
 from repo_lens.rag.qdrant_index import QdrantVectorIndex
 from repo_lens.rag.reranker import VoyageReranker
+from repo_lens.rag.types import IndexedDocument
 
 logger = logging.getLogger(__name__)
 
@@ -103,13 +104,39 @@ class App:
             chat_client=orchestrator_chat_client,
         )
 
+    async def validate_repo(self, repo_context: RepoContext) -> bool:
+        try:
+            owner = repo_context.owner
+            repo = repo_context.repo
+
+            result = await self.github_mcp.call_tool(
+                "get_file_contents", {"owner": owner, "repo": repo, "path": "."}
+            )
+            if result.isError:
+                logger.warning("Repo %s/%s not found or not accessible.", owner, repo)
+                return False
+            return True
+        except Exception as e:
+            logger.error("Error checking repo: %s", e)
+            return False
+
+    async def _fetch_docs(self, repo_context: RepoContext) -> list[IndexedDocument]:
+        fetcher = RepoContentFetcher(
+            mcp_client=self.github_mcp, repo_context=repo_context
+        )
+
+        return await fetcher.fetch_repo_chunks()
+
     async def ensure_indexed(self, repo_context: RepoContext) -> None:
         if not self.document_indexer.exits(key="repo", value=repo_context.key):
-            fetcher = RepoContentFetcher(
-                mcp_client=self.github_mcp, repo_context=repo_context
-            )
-            docs = await fetcher.fetch_repo_chunks()
+            docs = await self._fetch_docs(repo_context)
             self.document_indexer.index(docs)
+
+    async def reindex(self, repo_context: RepoContext) -> int:
+        docs = await self._fetch_docs(repo_context)
+        return self.document_indexer.reindex(
+            key="repo", value=repo_context.key, documents=docs
+        )
 
     def _format_provider_model(self) -> str:
         return f"{self.config.provider}/{self.config.model}"

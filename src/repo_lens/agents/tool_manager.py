@@ -4,9 +4,9 @@ from typing import Any, Literal
 
 from mcp.types import CallToolResult, TextContent
 
+from repo_lens.core.mcp_client import MCPClient
 from repo_lens.core.repo_context import RepoContext
 from repo_lens.providers.chat_client import ToolCall
-from repo_lens.core.mcp_client import MCPClient
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +87,7 @@ class ToolManager:
                 tool_output: CallToolResult | None = await client.call_tool(
                     tool_name, tool_input
                 )
+                logger.info("tool call: %s(%s)", tool_name, tool_input)
 
                 items = []
                 if tool_output:
@@ -94,6 +95,7 @@ class ToolManager:
                 content_list = [
                     item.text for item in items if isinstance(item, TextContent)
                 ]
+                logger.info("tool result: %s", content_list)
 
                 result_status: Literal["success", "error"] = (
                     "error" if tool_output and tool_output.isError else "success"

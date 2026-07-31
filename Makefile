@@ -1,4 +1,4 @@
-.PHONY: build chroma run run-ui run-ui-docker down clean-chroma install test e2e test-all lint prompt-eval rag-eval index
+.PHONY: build chroma run-cli run-ui run-ui-docker down clean-chroma install test e2e test-all lint prompt-eval rag-eval index
 
 build:
 	docker compose build
@@ -6,7 +6,7 @@ build:
 chroma:
 	docker compose up -d chroma
 
-run:
+run-cli:
 	docker compose down
 	docker compose up -d chroma
 	docker compose run --rm app

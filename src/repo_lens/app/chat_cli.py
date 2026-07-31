@@ -10,9 +10,8 @@ from repo_lens.agents.orchestrator import delegation_label
 from repo_lens.app.runtime import App
 from repo_lens.core.config import Config, create_config
 from repo_lens.core.logging_config import configure_logging
-from repo_lens.core.mcp_client import MCPClient, create_github_client
+from repo_lens.core.mcp_client import create_github_client
 from repo_lens.core.repo_context import RepoContext
-from repo_lens.rag.indexer import RepoContentFetcher
 
 logger = logging.getLogger(__name__)
 
@@ -42,20 +41,6 @@ def flush_stdin() -> None:
         pass
 
 
-async def validate_repo(github_mcp: MCPClient, owner: str, repo: str) -> bool:
-    try:
-        result = await github_mcp.call_tool(
-            "get_file_contents", {"owner": owner, "repo": repo, "path": "."}
-        )
-        if result.isError:
-            logger.warning("Repo %s/%s not found or not accessible.", owner, repo)
-            return False
-        return True
-    except Exception as e:
-        logger.error("Error checking repo: %s", e)
-        return False
-
-
 def resolve_owner(config: Config) -> str:
     if config.default_org:
         entered = input(f"> Org [{config.default_org}] (Enter to keep): ").strip()
@@ -66,21 +51,22 @@ def resolve_owner(config: Config) -> str:
             return owner
 
 
-async def resolve_repo(github_mcp: MCPClient, owner: str) -> str | None:
+async def resolve_repo(app: App, owner: str) -> str | None:
     while True:
         repo = input("> Repo name (or /back): ").strip()
         if repo.lower() == "/back":
             return None
-        if await validate_repo(github_mcp=github_mcp, owner=owner, repo=repo):
+        repo_context = RepoContext(owner=owner, repo=repo)
+        if await app.validate_repo(repo_context):
             return repo
 
 
-async def select_repo(github_mcp: MCPClient, config: Config) -> tuple[str, str]:
+async def select_repo(app: App, config: Config) -> tuple[str, str]:
     flush_stdin()
     while True:
         owner = resolve_owner(config)
         print_status(label="Org", message=owner)
-        repo = await resolve_repo(github_mcp=github_mcp, owner=owner)
+        repo = await resolve_repo(app=app, owner=owner)
         if repo is None:
             continue
         return owner, repo
@@ -107,14 +93,7 @@ async def chat_loop(app: App, repo_context: RepoContext) -> None:
 
             if user_input.lower() == "/reindex":
                 print_status(label="Re-indexing", message=repo_context.key)
-                fetcher = RepoContentFetcher(
-                    mcp_client=app.github_mcp,
-                    repo_context=repo_context,
-                )
-                docs = await fetcher.fetch_repo_chunks()
-                app.document_indexer.reindex(
-                    key="repo", value=repo_context.key, documents=docs
-                )
+                await app.reindex(repo_context=repo_context)
                 print_status(label="Re-indexed", message=repo_context.key)
                 continue
             before = app.token_tracker.summary()
@@ -157,7 +136,7 @@ async def main() -> None:
         if count > 0:
             logger.info("Loaded %d chunks from persistent storage.", count)
 
-        owner, repo = await select_repo(github_mcp=github_mcp, config=config)
+        owner, repo = await select_repo(app=app, config=config)
         repo_context = RepoContext(repo=repo, owner=owner)
 
         await app.ensure_indexed(repo_context=repo_context)

@@ -59,13 +59,16 @@ def _user_facing_stream_error(detail: str) -> str:
 
 @cl.on_chat_start  # type: ignore[misc]
 async def on_chat_start() -> None:
+    msg = cl.Message(content="Setting up...")
+    await msg.send()
+
     config = create_config()
     github_mcp = create_github_client(config.github_token)
     await github_mcp.connect()
     cl.user_session.set("github_mcp", github_mcp)
 
-    msg = cl.Message(content="Indexing repository...")
-    await msg.send()
+    msg.content = "Indexing repository..."
+    await msg.update()
 
     owner = config.default_org
     repo = config.default_repo
@@ -76,6 +79,16 @@ async def on_chat_start() -> None:
     cl.user_session.set("app", app)
 
     repo_context = RepoContext(owner=owner, repo=repo)
+
+    if not await app.validate_repo(repo_context):
+        msg.content = (
+            f"Could not access `{repo_context.key}`. Check that DEFAULT_ORG/DEFAULT_REPO "
+            "are correct and the GitHub token has access."
+        )
+        await msg.update()
+        cl.user_session.set("setup_error", msg.content)
+        return
+
     cl.user_session.set("repo_context", repo_context)
 
     app.document_indexer.load_from_store()
@@ -87,20 +100,28 @@ async def on_chat_start() -> None:
     await msg.update()
 
 
+async def ui_on_delegate(agent_name: str, task: str) -> None:
+    async with cl.Step(name=delegation_label(agent_name), type="tool") as step:
+        step.output = task
+
+
 @cl.on_message  # type: ignore[misc]
 async def on_message(message: cl.Message) -> None:
+    setup_error = cl.user_session.get("setup_error")
+    if setup_error:
+        await cl.Message(content=setup_error).send()
+        return
+
     app = cl.user_session.get("app")
     repo_context = cl.user_session.get("repo_context")
-
-    async def on_delegate(agent_name: str, task: str) -> None:
-        async with cl.Step(name=delegation_label(agent_name), type="tool") as step:
-            step.output = task
 
     before = app.token_tracker.summary()
 
     try:
         answer = await app.orchestrator.run(
-            query=message.content, repo_context=repo_context, on_delegate=on_delegate
+            query=message.content,
+            repo_context=repo_context,
+            on_delegate=ui_on_delegate,
         )
     except StreamError as e:
         logger.error("Provider stream error: %s", e)

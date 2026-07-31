@@ -73,7 +73,7 @@ Vector store configuration:
 The app runs as a multi-container stack via Docker Compose: the app connects to Qdrant (vector search) and ChromaDB (legacy fallback) for persistent storage. Set `VECTOR_STORE=qdrant` (default) or `VECTOR_STORE=chroma` to choose the backend.
 
 ```bash
-make run
+make run-cli
 ```
 
 This starts the ChromaDB server, waits for it to be healthy, and launches the CLI. Source changes are picked up automatically via volume mount. Run `make build` after changing dependencies.
