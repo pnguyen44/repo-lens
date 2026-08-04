@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 import re
@@ -59,6 +60,10 @@ def _user_facing_stream_error(detail: str) -> str:
 
 @cl.on_chat_start  # type: ignore[misc]
 async def on_chat_start() -> None:
+    cl.user_session.set("message_lock", asyncio.Lock())
+    startup_ready = asyncio.Event()
+    cl.user_session.set("startup_ready", startup_ready)
+
     msg = cl.Message(content="Setting up...")
     await msg.send()
 
@@ -98,6 +103,7 @@ async def on_chat_start() -> None:
         f"Chatting about `{repo_context.key}`. Ask a question about this repo."
     )
     await msg.update()
+    startup_ready.set()
 
 
 async def ui_on_delegate(agent_name: str, task: str) -> None:
@@ -112,30 +118,49 @@ async def on_message(message: cl.Message) -> None:
         await cl.Message(content=setup_error).send()
         return
 
-    app = cl.user_session.get("app")
-    repo_context = cl.user_session.get("repo_context")
-
-    before = app.token_tracker.summary()
-
-    try:
-        answer = await app.orchestrator.run(
-            query=message.content,
-            repo_context=repo_context,
-            on_delegate=ui_on_delegate,
-        )
-    except StreamError as e:
-        logger.error("Provider stream error: %s", e)
-        await cl.Message(content=_user_facing_stream_error(str(e))).send()
-        return
-    except Exception as e:
-        logger.exception("Unexpected chat error: %s", e)
+    startup_ready: asyncio.Event | None = cl.user_session.get("startup_ready")
+    if startup_ready is None or not startup_ready.is_set():
         await cl.Message(
-            content="Something went wrong. Please try again in a moment."
+            content="Still setting up. Please wait for indexing to finish."
         ).send()
         return
 
-    await cl.Message(content=answer or "No response generated.").send()
-    await cl.Message(content=f"_Tokens: {app.format_tokens_for_turn(before)}_").send()
+    lock: asyncio.Lock = cl.user_session.get("message_lock")
+
+    if lock.locked():
+        await cl.Message(
+            content="Still working on your previous message. Please wait for it to finish"
+        ).send()
+
+        return
+
+    async with lock:
+        app = cl.user_session.get("app")
+        repo_context = cl.user_session.get("repo_context")
+
+        before = app.token_tracker.summary()
+
+        try:
+            answer = await app.orchestrator.run(
+                query=message.content,
+                repo_context=repo_context,
+                on_delegate=ui_on_delegate,
+            )
+        except StreamError as e:
+            logger.error("Provider stream error: %s", e)
+            await cl.Message(content=_user_facing_stream_error(str(e))).send()
+            return
+        except Exception as e:
+            logger.exception("Unexpected chat error: %s", e)
+            await cl.Message(
+                content="Something went wrong. Please try again in a moment."
+            ).send()
+            return
+
+        await cl.Message(content=answer or "No response generated.").send()
+        await cl.Message(
+            content=f"_Tokens: {app.format_tokens_for_turn(before)}_"
+        ).send()
 
 
 @cl.on_chat_end  # type: ignore[misc]

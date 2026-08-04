@@ -2,9 +2,13 @@ import copy
 import logging
 from typing import Any, Protocol
 
+from anthropic import RateLimitError as AnthropicRateLimitError
+from google.genai.errors import ClientError as GeminiClientError
+
 from repo_lens.agents.agent import Agent, AgentName
 from repo_lens.agents.chat import OnToolInputCallback, OnToolStartCallback
 from repo_lens.core.repo_context import RepoContext
+from repo_lens.core.retry import wait_for_retry
 from repo_lens.providers.chat_client import ChatClientProtocol
 
 logger = logging.getLogger(__name__)
@@ -70,6 +74,7 @@ class Orchestrator:
         self.chat_client = chat_client
         self.messages: list[Any] = []
         self.max_delegations = max_delegations
+        self._stream_had_output = False
 
         agent_names = [name.value for name in agents.keys()]
         agent_lines = [
@@ -93,23 +98,30 @@ class Orchestrator:
             repo_context.prompt_suffix() if repo_context else ""
         )
         text = ""
-        with self.chat_client.chat_stream(
-            messages=self.messages,
-            tools=self.tools,
-            system=system,
-            web_search=False,
-        ) as stream:
-            for chunk in stream:
-                if chunk.type == "text":
-                    text += chunk.text
-                    if on_text:
-                        on_text(chunk.text)
-            response = stream.get_final_message()
-            if response.usage:
-                self.chat_client.record_usage(response.usage)
-        self.chat_client.add_assistant_message(messages=self.messages, message=response)
+        had_output = False
+        try:
+            with self.chat_client.chat_stream(
+                messages=self.messages,
+                tools=self.tools,
+                system=system,
+                web_search=False,
+            ) as stream:
+                for chunk in stream:
+                    if chunk.type == "text":
+                        text += chunk.text
+                        had_output = True
+                        if on_text:
+                            on_text(chunk.text)
+                response = stream.get_final_message()
+                if response.usage:
+                    self.chat_client.record_usage(response.usage)
+            self.chat_client.add_assistant_message(
+                messages=self.messages, message=response
+            )
 
-        return response, text
+            return response, text
+        finally:
+            self._stream_had_output = had_output
 
     async def run(
         self,
@@ -123,9 +135,35 @@ class Orchestrator:
         self.chat_client.add_user_message(messages=self.messages, content=query)
 
         delegations = 0
+        retries = 0
 
         while True:
-            response, text = self._stream(on_text=on_text, repo_context=repo_context)
+            try:
+                response, text = self._stream(
+                    on_text=on_text, repo_context=repo_context
+                )
+            except AnthropicRateLimitError:
+                if self._stream_had_output:
+                    logger.warning(
+                        "Rate limited after partial stream output; not retrying."
+                    )
+                    raise
+                if await wait_for_retry(retries=retries):
+                    raise
+                retries += 1
+                continue
+            except GeminiClientError as e:
+                if e.code != 429:
+                    raise
+                if self._stream_had_output:
+                    logger.warning(
+                        "Rate limited after partial stream output; not retrying."
+                    )
+                    raise
+                if await wait_for_retry(retries=retries):
+                    raise
+                retries += 1
+                continue
 
             if response.stop_reason != "tool_use":
                 return text

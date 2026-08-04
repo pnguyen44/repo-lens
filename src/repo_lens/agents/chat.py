@@ -4,11 +4,14 @@ import time
 from enum import Enum
 from typing import Any, Protocol
 
-from anthropic import AuthenticationError, BadRequestError, RateLimitError
+from anthropic import AuthenticationError, BadRequestError
+from anthropic import RateLimitError as AnthropicRateLimitError
+from google.genai.errors import ClientError as GeminiClientError
 
 from repo_lens.agents.tool_manager import ToolManager
 from repo_lens.core.mcp_client import MCPClient
 from repo_lens.core.repo_context import RepoContext
+from repo_lens.core.retry import wait_for_retry
 from repo_lens.core.trace_context import start_query_trace
 from repo_lens.providers.chat_client import ChatClientProtocol, StreamError
 from repo_lens.rag.embeddings import Embedder
@@ -56,6 +59,7 @@ class Chat:
         self.web_search = web_search
         self.reranker = reranker
         self.repo_context: RepoContext | None = None
+        self._stream_had_output = False
 
     def _build_context(self, query: str) -> str | list[Any]:
         if not self.hybrid_retriever:
@@ -104,7 +108,7 @@ class Chat:
         if not self.tools:
             self.tools = await ToolManager.get_all_tools(self.mcp_clients)
 
-        augmented_query = self._build_context(query) or query
+        augmented_query = await asyncio.to_thread(self._build_context, query) or query
         self.chat_client.add_user_message(self.messages, augmented_query)
 
     def _stream_and_log(
@@ -118,57 +122,62 @@ class Chat:
             self.repo_context.prompt_suffix() if self.repo_context else ""
         )
         text = ""
-        with self.chat_client.chat_stream(
-            messages=self.messages,
-            tools=self.tools,
-            system=system,
-            web_search=self.web_search,
-            tool_choice=tool_choice,
-        ) as stream:
-            for chunk in stream:
-                if chunk.type == "text":
-                    print(chunk.text, end="", flush=True)
-                    text += chunk.text
-                elif chunk.type == "tool_start":
-                    if on_tool_start:
-                        on_tool_start(chunk.tool_name)
-                elif chunk.type == "tool_input":
-                    if on_tool_input:
-                        on_tool_input(chunk.partial_json)
-                elif chunk.type == "tool_stop":
-                    if on_tool_input:
-                        print()
+        had_output = False
+        try:
+            with self.chat_client.chat_stream(
+                messages=self.messages,
+                tools=self.tools,
+                system=system,
+                web_search=self.web_search,
+                tool_choice=tool_choice,
+            ) as stream:
+                for chunk in stream:
+                    if chunk.type == "text":
+                        print(chunk.text, end="", flush=True)
+                        text += chunk.text
+                        had_output = True
+                    elif chunk.type == "tool_start":
+                        if on_tool_start:
+                            on_tool_start(chunk.tool_name)
+                    elif chunk.type == "tool_input":
+                        if on_tool_input:
+                            on_tool_input(chunk.partial_json)
+                    elif chunk.type == "tool_stop":
+                        if on_tool_input:
+                            print()
 
-            # End the streamed line so later log lines are not glued to the answer.
-            if text:
-                print(flush=True)
+                # End the streamed line so later log lines are not glued to the answer.
+                if text:
+                    print(flush=True)
 
-            response = stream.get_final_message()
+                response = stream.get_final_message()
 
-            call_ms = (time.perf_counter() - call_start) * 1000
-            if response.usage:
-                self.chat_client.record_usage(response.usage)
-                usage = response.usage
-                in_tok = (
-                    usage.get("input_tokens", 0)
-                    if isinstance(usage, dict)
-                    else getattr(usage, "input_tokens", 0)
-                )
-                out_tok = (
-                    usage.get("output_tokens", 0)
-                    if isinstance(usage, dict)
-                    else getattr(usage, "output_tokens", 0)
-                )
-                logger.info(
-                    "llm call",
-                    extra={
-                        "call_ms": round(call_ms, 2),
-                        "input_tokens": in_tok,
-                        "output_tokens": out_tok,
-                    },
-                )
+                call_ms = (time.perf_counter() - call_start) * 1000
+                if response.usage:
+                    self.chat_client.record_usage(response.usage)
+                    usage = response.usage
+                    in_tok = (
+                        usage.get("input_tokens", 0)
+                        if isinstance(usage, dict)
+                        else getattr(usage, "input_tokens", 0)
+                    )
+                    out_tok = (
+                        usage.get("output_tokens", 0)
+                        if isinstance(usage, dict)
+                        else getattr(usage, "output_tokens", 0)
+                    )
+                    logger.info(
+                        "llm call",
+                        extra={
+                            "call_ms": round(call_ms, 2),
+                            "input_tokens": in_tok,
+                            "output_tokens": out_tok,
+                        },
+                    )
 
-            return response, text
+                return response, text
+        finally:
+            self._stream_had_output = had_output
 
     def _process_response(self, response: Any) -> RunStatus:
         if not response.raw:
@@ -253,13 +262,26 @@ class Chat:
             except AuthenticationError:
                 print("\nInvalid API key. Check your .env file.")
                 break
-            except RateLimitError:
-                if retries >= MAX_RETRIES:
-                    logger.error("Rate limited after %d retries. Skipping.", retries)
+            except AnthropicRateLimitError:
+                if self._stream_had_output:
+                    logger.warning(
+                        "Rate limited after partial stream output; not retrying."
+                    )
                     break
-                wait = 2**retries
-                logger.warning("Rate limited. Retrying in %ds...", wait)
-                await asyncio.sleep(wait)
+                if await wait_for_retry(retries, MAX_RETRIES):
+                    break
+                retries += 1
+                continue
+            except GeminiClientError as e:
+                if e.code != 429:
+                    raise
+                if self._stream_had_output:
+                    logger.warning(
+                        "Rate limited after partial stream output; not retrying."
+                    )
+                    break
+                if await wait_for_retry(retries, MAX_RETRIES):
+                    break
                 retries += 1
                 continue
             except StreamError as e:
