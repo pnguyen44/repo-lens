@@ -165,3 +165,26 @@ async def test_run_handles_unknown_agent_name() -> None:
 
     await orchestrator.run("test_query")
     mock_agent.run.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_run_retires_empty_specialist_then_fails_closed() -> None:
+    tool_call_response = ChatResponse(
+        stop_reason="tool_use",
+        text="",
+        tool_calls=[_make_delegation_call("github", "list open PRs")],
+    )
+
+    chat_client = MagicMock()
+    chat_client.chat_stream.return_value = _make_stream(tool_call_response)
+
+    mock_agent = _make_agent(run_result="")
+    mock_agent.run = AsyncMock(return_value="")
+    agents: dict[AgentName, Any] = {AgentName.GITHUB: mock_agent}
+    orchestrator = Orchestrator(agents=agents, chat_client=chat_client)
+
+    result = await orchestrator.run("list open PRs")
+
+    assert mock_agent.run.call_count == 2
+    assert "couldn't retrieve" in result.lower()
+    assert chat_client.chat_stream.call_count == 1

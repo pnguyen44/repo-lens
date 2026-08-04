@@ -160,7 +160,10 @@ class Orchestrator:
                         "Rate limited after partial stream output; not retrying."
                     )
                     raise
-                if await wait_for_retry(retries=retries):
+                if await wait_for_retry(
+                    retries=retries,
+                    detail=getattr(e, "message", str(e)),
+                ):
                     raise
                 retries += 1
                 continue
@@ -194,6 +197,24 @@ class Orchestrator:
                     on_tool_start=on_tool_start,
                     on_tool_input=on_tool_input,
                 )
+
+                if not result.strip():
+                    logger.warning(
+                        "Specialist %s returned empty output; retry once", agent_name
+                    )
+
+                    result = await agent.run(
+                        task,
+                        repo_context=repo_context,
+                        on_tool_start=on_tool_start,
+                        on_tool_input=on_tool_input,
+                    )
+
+                if not result.strip():
+                    return (
+                        "I couldn't retrieve that information right now. "
+                        "Please try again in a moment."
+                    )
 
                 tool_result = {
                     "tool_use_id": tool.id,

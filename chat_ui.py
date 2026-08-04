@@ -1,20 +1,19 @@
 import asyncio
 import logging
 import os
-import re
 
 import chainlit as cl
+from google.genai.errors import ClientError as GeminiClientError
 
 from repo_lens.agents.orchestrator import delegation_label
 from repo_lens.app.runtime import App
 from repo_lens.core.config import create_config
 from repo_lens.core.mcp_client import create_github_client
 from repo_lens.core.repo_context import RepoContext
+from repo_lens.core.retry import format_rate_limit_message
 from repo_lens.providers.chat_client import StreamError
 
 logger = logging.getLogger(__name__)
-
-_RETRY_SECONDS = re.compile(r"retry in\s+(\d+(?:\.\d+)?)\s*s", re.IGNORECASE)
 
 
 def _validate_auth_env() -> None:
@@ -38,24 +37,6 @@ def auth_callback(username: str, password: str) -> cl.User | None:
     if username == expected_user and password == expected_pass:
         return cl.User(identifier=username)
     return None
-
-
-def _user_facing_stream_error(detail: str) -> str:
-    lower = detail.lower()
-    if "quota" in lower or "rate" in lower:
-        message = (
-            "The AI service is temporarily unavailable due to a usage limit. "
-            "Please wait a minute and try again."
-        )
-        match = _RETRY_SECONDS.search(detail)
-        if match:
-            seconds = max(1, int(float(match.group(1))))
-            message = (
-                "The AI service is temporarily unavailable due to a usage limit. "
-                f"Please try again in about {seconds} seconds."
-            )
-        return message
-    return "The AI service failed to respond. Please wait a moment and try again."
 
 
 @cl.on_chat_start  # type: ignore[misc]
@@ -151,7 +132,14 @@ async def on_message(message: cl.Message) -> None:
             )
         except StreamError as e:
             logger.error("Provider stream error: %s", e)
-            await cl.Message(content=_user_facing_stream_error(str(e))).send()
+            await cl.Message(content=format_rate_limit_message(str(e))).send()
+            return
+        except GeminiClientError as e:
+            if e.code != 429:
+                raise
+            detail = getattr(e, "message", str(e))
+            logger.error("Gemini rate limit: %s", detail)
+            await cl.Message(content=format_rate_limit_message(detail)).send()
             return
         except Exception as e:
             logger.exception("Unexpected chat error: %s", e)

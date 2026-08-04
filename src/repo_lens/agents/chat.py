@@ -268,7 +268,7 @@ class Chat:
                         "Rate limited after partial stream output; not retrying."
                     )
                     break
-                if await wait_for_retry(retries, MAX_RETRIES):
+                if await wait_for_retry(retries=retries, max_retries=MAX_RETRIES):
                     break
                 retries += 1
                 continue
@@ -280,7 +280,11 @@ class Chat:
                         "Rate limited after partial stream output; not retrying."
                     )
                     break
-                if await wait_for_retry(retries, MAX_RETRIES):
+                if await wait_for_retry(
+                    retries=retries,
+                    max_retries=MAX_RETRIES,
+                    detail=getattr(e, "message", str(e)),
+                ):
                     break
                 retries += 1
                 continue
