@@ -3,6 +3,7 @@ import logging
 from typing import Any, Iterator, Unpack
 
 from google.genai import Client as GenaiClient
+from google.genai.errors import ClientError as GeminiClientError
 
 from repo_lens.providers.chat_client import (
     ChatClient,
@@ -42,6 +43,11 @@ def _extract_tool_calls(interaction: Any) -> list[ToolCall]:
     return tool_calls
 
 
+def _is_rate_limit_message(message: str) -> bool:
+    lower = message.lower()
+    return "quota" in lower or "rate" in lower
+
+
 class GeminiStream:
     def __init__(self, stream: Any) -> None:
         self._stream: Any = stream
@@ -71,6 +77,8 @@ class GeminiStream:
                     error = getattr(chunk, "error", None)
                     msg = getattr(error, "message", str(error)) if error else str(chunk)
                     logger.error("Gemini stream error: %s", msg)
+                    if _is_rate_limit_message(msg):
+                        raise GeminiClientError(429, {"error": {"message": msg}})
                     raise StreamError(f"Gemini stream error: {msg}")
 
                 case "step.start" if (

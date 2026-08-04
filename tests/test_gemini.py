@@ -1,6 +1,10 @@
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
+from google.genai.errors import ClientError as GeminiClientError
+
+from repo_lens.providers.chat_client import StreamError
 from repo_lens.providers.gemini import GeminiStream
 
 
@@ -84,3 +88,30 @@ def test_gemini_stream_accumulates_legacy_arguments() -> None:
         "agent_name": "github",
         "task": "list PRs",
     }
+
+
+def test_gemini_stream_raises_client_error_on_rate_limit() -> None:
+    events = [
+        _event(
+            "error",
+            error=SimpleNamespace(
+                message="You exceeded your current quota. Please retry in 3.9s."
+            ),
+        ),
+    ]
+
+    stream = GeminiStream(iter(events))
+    with pytest.raises(GeminiClientError) as exc_info:
+        list(stream)
+
+    assert exc_info.value.code == 429
+
+
+def test_gemini_stream_raises_stream_error_on_non_rate_limit() -> None:
+    events = [
+        _event("error", error=SimpleNamespace(message="Internal server error")),
+    ]
+
+    stream = GeminiStream(iter(events))
+    with pytest.raises(StreamError):
+        list(stream)
