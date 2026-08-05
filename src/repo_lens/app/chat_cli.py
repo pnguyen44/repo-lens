@@ -85,6 +85,9 @@ def cli_on_tool_input(partial_json: str) -> None:
 
 
 async def chat_loop(app: App, repo_context: RepoContext) -> None:
+    async def on_file_fetched(path: str) -> None:
+        await app.index_file_if_needed(repo_context, path)
+
     try:
         while True:
             user_input = input("> ")
@@ -104,6 +107,7 @@ async def chat_loop(app: App, repo_context: RepoContext) -> None:
                 on_text=lambda t: print(t, end="", flush=True),
                 on_tool_start=cli_on_tool_start,
                 on_tool_input=cli_on_tool_input,
+                on_file_fetched=on_file_fetched,
             )
             print()
             print_status(
@@ -138,8 +142,6 @@ async def main() -> None:
 
         owner, repo = await select_repo(app=app, config=config)
         repo_context = RepoContext(repo=repo, owner=owner)
-
-        await app.ensure_indexed(repo_context=repo_context)
 
         print_status(label="Chatting about", message=repo_context.key)
 

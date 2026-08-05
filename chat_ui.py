@@ -78,10 +78,6 @@ async def on_chat_start() -> None:
     await msg.update()
 
     app.document_indexer.load_from_store()
-    if not app.document_indexer.exits(key="repo", value=repo_context.key):
-        msg.content = "Indexing repository..."
-        await msg.update()
-    await app.ensure_indexed(repo_context=repo_context)
 
     msg.content = (
         f"Chatting about `{repo_context.key}`. Ask a question about this repo."
@@ -104,9 +100,7 @@ async def on_message(message: cl.Message) -> None:
 
     startup_ready: asyncio.Event | None = cl.user_session.get("startup_ready")
     if startup_ready is None or not startup_ready.is_set():
-        await cl.Message(
-            content="Still setting up. Please wait for indexing to finish."
-        ).send()
+        await cl.Message(content="Still setting up. Please wait a moment.").send()
         return
 
     lock: asyncio.Lock = cl.user_session.get("message_lock")
@@ -125,10 +119,15 @@ async def on_message(message: cl.Message) -> None:
         before = app.token_tracker.summary()
 
         try:
+
+            async def on_file_fetched(path: str) -> None:
+                await app.index_file_if_needed(repo_context, path)
+
             answer = await app.orchestrator.run(
                 query=message.content,
                 repo_context=repo_context,
                 on_delegate=ui_on_delegate,
+                on_file_fetched=on_file_fetched,
             )
         except StreamError as e:
             logger.error("Provider stream error: %s", e)

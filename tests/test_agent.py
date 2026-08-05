@@ -59,6 +59,7 @@ async def test_agent_run_clears_messages_and_delegates() -> None:
         repo_context=None,
         on_tool_start=None,
         on_tool_input=None,
+        on_file_fetched=None,
     )
 
 
@@ -77,4 +78,5 @@ async def test_agent_run_forwards_repo_context() -> None:
         repo_context=repo_context,
         on_tool_start=None,
         on_tool_input=None,
+        on_file_fetched=None,
     )

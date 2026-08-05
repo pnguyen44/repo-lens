@@ -31,6 +31,10 @@ class OnToolInputCallback(Protocol):
     def __call__(self, partial_json: str) -> None: ...
 
 
+class OnFileFetchedCallback(Protocol):
+    async def __call__(self, path: str) -> None: ...
+
+
 class RunStatus(Enum):
     DONE = "done"
     TOOL_USE = "tool_use"
@@ -200,7 +204,12 @@ class Chat:
 
         return RunStatus.TOOL_USE
 
-    async def _execute_tools(self, response: Any) -> None:
+    async def _execute_tools(
+        self,
+        response: Any,
+        *,
+        on_file_fetched: OnFileFetchedCallback | None = None,
+    ) -> None:
         tool_names = [
             b.get("name") if isinstance(b, dict) else getattr(b, "name", None)
             for b in response.tool_calls
@@ -211,6 +220,7 @@ class Chat:
             clients=self.mcp_clients,
             tool_calls=response.tool_calls,
             repo_context=self.repo_context,
+            on_file_fetched=on_file_fetched,
         )
 
         self.chat_client.add_user_message(
@@ -225,6 +235,7 @@ class Chat:
         tool_choice: dict[str, Any] | None = None,
         on_tool_start: OnToolStartCallback | None = None,
         on_tool_input: OnToolInputCallback | None = None,
+        on_file_fetched: OnFileFetchedCallback | None = None,
     ) -> str:
         start_query_trace()
         self.repo_context = repo_context
@@ -247,7 +258,7 @@ class Chat:
                 if status != RunStatus.TOOL_USE:
                     break
 
-                await self._execute_tools(response)
+                await self._execute_tools(response, on_file_fetched=on_file_fetched)
                 tool_choice = None
 
             except BadRequestError as e:

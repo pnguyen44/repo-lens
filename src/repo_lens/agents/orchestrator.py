@@ -6,7 +6,11 @@ from anthropic import RateLimitError as AnthropicRateLimitError
 from google.genai.errors import ClientError as GeminiClientError
 
 from repo_lens.agents.agent import Agent, AgentName
-from repo_lens.agents.chat import OnToolInputCallback, OnToolStartCallback
+from repo_lens.agents.chat import (
+    OnFileFetchedCallback,
+    OnToolInputCallback,
+    OnToolStartCallback,
+)
 from repo_lens.core.repo_context import RepoContext
 from repo_lens.core.retry import wait_for_retry
 from repo_lens.providers.chat_client import ChatClientProtocol
@@ -131,6 +135,7 @@ class Orchestrator:
         on_text: OnTextCallback | None = None,
         on_tool_start: OnToolStartCallback | None = None,
         on_tool_input: OnToolInputCallback | None = None,
+        on_file_fetched: OnFileFetchedCallback | None = None,
     ) -> str:
         self.chat_client.add_user_message(messages=self.messages, content=query)
 
@@ -196,6 +201,7 @@ class Orchestrator:
                     repo_context=repo_context,
                     on_tool_start=on_tool_start,
                     on_tool_input=on_tool_input,
+                    on_file_fetched=on_file_fetched,
                 )
 
                 if not result.strip():
@@ -208,6 +214,7 @@ class Orchestrator:
                         repo_context=repo_context,
                         on_tool_start=on_tool_start,
                         on_tool_input=on_tool_input,
+                        on_file_fetched=on_file_fetched,
                     )
 
                 if not result.strip():

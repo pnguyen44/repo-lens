@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Any, Literal
+from typing import Any, Awaitable, Callable, Literal
 
 from mcp.types import CallToolResult, TextContent
 
@@ -56,6 +56,7 @@ class ToolManager:
         clients: dict[str, MCPClient],
         tool_calls: list[ToolCall],
         repo_context: RepoContext | None = None,
+        on_file_fetched: Callable[[str], Awaitable[None]] | None = None,
     ) -> list[dict[str, Any]]:
         tool_result_blocks: list[dict[str, Any]] = []
         for tool_call in tool_calls:
@@ -102,6 +103,16 @@ class ToolManager:
                 )
 
                 content_json = json.dumps(content_list)
+
+                if (
+                    on_file_fetched
+                    and result_status == "success"
+                    and tool_name == "get_file_contents"
+                ):
+                    fetch_path = tool_input.get("path", "")
+                    if isinstance(fetch_path, str):
+                        await on_file_fetched(fetch_path)
+
                 tool_result_part = cls._build_tool_result_part(
                     tool_use_id=tool_use_id,
                     name=tool_name,

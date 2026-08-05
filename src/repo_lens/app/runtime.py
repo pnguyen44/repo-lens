@@ -16,7 +16,7 @@ from repo_lens.rag.chroma_index import ChromaVectorIndex
 from repo_lens.rag.document_indexer import DocumentIndexer
 from repo_lens.rag.embeddings import InputType, VoyageEmbedder
 from repo_lens.rag.hybrid_retriever import HybridRetriever
-from repo_lens.rag.indexer import RepoContentFetcher
+from repo_lens.rag.indexer import EXCLUDE_FILES, RepoContentFetcher
 from repo_lens.rag.qdrant_index import QdrantVectorIndex
 from repo_lens.rag.reranker import VoyageReranker
 from repo_lens.rag.types import IndexedDocument
@@ -127,10 +127,27 @@ class App:
 
         return await fetcher.fetch_repo_chunks()
 
-    async def ensure_indexed(self, repo_context: RepoContext) -> None:
-        if not self.document_indexer.exits(key="repo", value=repo_context.key):
-            docs = await self._fetch_docs(repo_context)
-            self.document_indexer.index(docs)
+    async def index_file_if_needed(self, repo_context: RepoContext, path: str) -> int:
+        if not path.endswith(".md"):
+            return 0
+
+        if path.split("/")[-1] in EXCLUDE_FILES:
+            logger.debug("Skipping on-demand index for excluded file: %s", path)
+            return 0
+
+        if self.document_indexer.file_is_indexed(repo=repo_context.key, path=path):
+            logger.debug("Skipping on-demand index, already indexed: %s", path)
+            return 0
+
+        fetcher = RepoContentFetcher(
+            mcp_client=self.github_mcp, repo_context=repo_context
+        )
+        docs = await fetcher.fetch_file_chunks(path)
+        count = self.document_indexer.index_file(
+            repo=repo_context.key, path=path, documents=docs
+        )
+        logger.info("On-demand indexed %s (%d chunks)", path, count)
+        return count
 
     async def reindex(self, repo_context: RepoContext) -> int:
         docs = await self._fetch_docs(repo_context)

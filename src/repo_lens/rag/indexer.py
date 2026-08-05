@@ -23,6 +23,32 @@ PREVIEW_LENGTH = 200
 EXCLUDE_FILES = {"CLAUDE.md", "AGENTS.md"}
 
 
+def file_path_to_chunks(
+    repo_context: RepoContext, path: str, text: str
+) -> list[IndexedDocument]:
+    chunks = [c for c in chunk_by_section(text) if c.strip()]
+    documents: list[IndexedDocument] = []
+
+    for chunk in chunks:
+        section = chunk.split("\n", 1)[0].lstrip("# ").strip()
+        anchor = to_github_anchor(section)
+        url = (
+            f"https://github.com/{repo_context.owner}/{repo_context.repo}"
+            f"/blob/main/{path}#{anchor}"
+        )
+
+        documents.append(
+            {
+                "content": chunk,
+                "repo": repo_context.key,
+                "path": path,
+                "section": section,
+                "url": url,
+            }
+        )
+    return documents
+
+
 class RepoContentFetcher:
     def __init__(self, mcp_client: MCPClient, repo_context: RepoContext) -> None:
         self.mcp_client = mcp_client
@@ -83,6 +109,10 @@ class RepoContentFetcher:
 
         return md_files
 
+    async def fetch_file_chunks(self, path: str) -> list[IndexedDocument]:
+        text = await self.fetch_file(path)
+        return file_path_to_chunks(repo_context=self.repo_context, path=path, text=text)
+
     async def fetch_repo_chunks(self) -> list[IndexedDocument]:
         repo_name = self.repo_context.key
         logger.info("Indexing %s", repo_name)
@@ -92,29 +122,7 @@ class RepoContentFetcher:
         documents: list[IndexedDocument] = []
 
         for file in file_list:
-            text = await self.fetch_file(file)
-
-            chunks = [c for c in chunk_by_section(text) if c.strip()]
-
-            if not chunks:
-                continue
-
-            for chunk in chunks:
-                section = chunk.split("\n", 1)[0].lstrip("# ").strip()
-                anchor = to_github_anchor(section)
-                url = (
-                    f"https://github.com/{self.repo_context.owner}/{self.repo_context.repo}"
-                    f"/blob/main/{file}#{anchor}"
-                )
-
-                documents.append(
-                    {
-                        "content": chunk,
-                        "repo": repo_name,
-                        "section": section,
-                        "url": url,
-                    }
-                )
+            documents.extend(await self.fetch_file_chunks(file))
 
         return documents
 
