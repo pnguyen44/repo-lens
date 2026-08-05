@@ -49,16 +49,16 @@ class DocumentIndexer:
         logger.info("Indexed %s (%d chunks)", path, len(stamped))
         return len(stamped)
 
-    def reindex(self, key: str, value: str, documents: list[IndexedDocument]) -> int:
-        self._vector_index.remove_from_collection(key, value)
+    def _sync_retriever(self) -> None:
+        self._retriever.reload(self._vector_index.get_all_documents())
 
-        stamped = [self._stamp_file_key(doc) for doc in documents]
-        self._retriever.add_documents(stamped)  # persist new docs, now file_key-tagged
-        self._retriever.reload(
-            self._vector_index.get_all_documents()
-        )  # rebuild BM25 from truth
-        logger.info("Reindexed %s=%s (%d chunks)", key, value, len(documents))
-        return len(documents)
+    def clear_repo(self, repo: str) -> int:
+        removed = self._vector_index.remove_from_collection("repo", repo)
+
+        self._sync_retriever()
+
+        logger.info("Cleared index for %s (%d chunks removed)", repo, removed)
+        return removed
 
     def search(
         self, *, query: str, k: int = 5, repo: str | None = None

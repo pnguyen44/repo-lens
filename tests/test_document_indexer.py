@@ -85,24 +85,15 @@ def test_index_file_skips_when_already_indexed(indexer_parts):
     retriever.add_documents.assert_not_called()
 
 
-def test_reindex(indexer_parts):
+def test_clear_repo(indexer_parts):
     indexer, vector_index, retriever = indexer_parts
-    existing_docs = [{"content": "old", "repo": "org/repo-a"}]
-    new_docs = [{"content": "new chunk", "repo": "org/repo-b", "path": "docs/foo.md"}]
-    vector_index.get_all_documents.return_value = existing_docs + new_docs
+    remaining_docs = [{"content": "other", "repo": "org/repo-b"}]
+    vector_index.remove_from_collection.return_value = 65
+    vector_index.get_all_documents.return_value = remaining_docs
 
-    count = indexer.reindex(key="repo", value="org/repo-b", documents=new_docs)
+    removed = indexer.clear_repo("org/repo-a")
 
-    assert count == 1
-    vector_index.remove_from_collection.assert_called_once_with("repo", "org/repo-b")
-    retriever.add_documents.assert_called_once_with(
-        [
-            {
-                "content": "new chunk",
-                "repo": "org/repo-b",
-                "path": "docs/foo.md",
-                "file_key": "org/repo-b:docs/foo.md",
-            }
-        ]
-    )
-    retriever.reload.assert_called_once_with(existing_docs + new_docs)
+    assert removed == 65
+    vector_index.remove_from_collection.assert_called_once_with("repo", "org/repo-a")
+    retriever.reload.assert_called_once_with(remaining_docs)
+    retriever.add_documents.assert_not_called()

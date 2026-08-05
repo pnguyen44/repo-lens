@@ -19,7 +19,6 @@ from repo_lens.rag.hybrid_retriever import HybridRetriever
 from repo_lens.rag.indexer import EXCLUDE_FILES, RepoContentFetcher
 from repo_lens.rag.qdrant_index import QdrantVectorIndex
 from repo_lens.rag.reranker import VoyageReranker
-from repo_lens.rag.types import IndexedDocument
 
 logger = logging.getLogger(__name__)
 
@@ -120,13 +119,6 @@ class App:
             logger.error("Error checking repo: %s", e)
             return False
 
-    async def _fetch_docs(self, repo_context: RepoContext) -> list[IndexedDocument]:
-        fetcher = RepoContentFetcher(
-            mcp_client=self.github_mcp, repo_context=repo_context
-        )
-
-        return await fetcher.fetch_repo_chunks()
-
     async def index_file_if_needed(self, repo_context: RepoContext, path: str) -> int:
         if not path.endswith(".md"):
             return 0
@@ -149,11 +141,8 @@ class App:
         logger.info("On-demand indexed %s (%d chunks)", path, count)
         return count
 
-    async def reindex(self, repo_context: RepoContext) -> int:
-        docs = await self._fetch_docs(repo_context)
-        return self.document_indexer.reindex(
-            key="repo", value=repo_context.key, documents=docs
-        )
+    def clear_cache(self, repo_context: RepoContext) -> int:
+        return self.document_indexer.clear_repo(repo=repo_context.key)
 
     def _format_provider_model(self) -> str:
         return f"{self.config.provider}/{self.config.model}"

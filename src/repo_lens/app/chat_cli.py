@@ -94,10 +94,13 @@ async def chat_loop(app: App, repo_context: RepoContext) -> None:
             if user_input.lower() in ("quit", "exit"):
                 break
 
-            if user_input.lower() == "/reindex":
-                print_status(label="Re-indexing", message=repo_context.key)
-                await app.reindex(repo_context=repo_context)
-                print_status(label="Re-indexed", message=repo_context.key)
+            if user_input.lower() == "/clear-cache":
+                print_status(label="Clearing cache", message=repo_context.key)
+                removed = app.clear_cache(repo_context=repo_context)
+                print_status(
+                    label="Cleared",
+                    message=f"{repo_context.key} ({removed} chunks removed)",
+                )
                 continue
             before = app.token_tracker.summary()
             await app.orchestrator.run(
