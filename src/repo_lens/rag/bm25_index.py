@@ -3,8 +3,7 @@ import re
 from collections import Counter
 from typing import Callable
 
-from repo_lens.rag.hybrid_retriever import validate_document
-from repo_lens.rag.types import IndexedDocument
+from repo_lens.rag.types import IndexedDocument, validate_document
 
 
 class BM25Index:

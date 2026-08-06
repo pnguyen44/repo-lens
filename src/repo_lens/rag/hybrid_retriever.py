@@ -1,20 +1,8 @@
 from typing import Any
 
+from repo_lens.rag.bm25_index import BM25Index
 from repo_lens.rag.protocols import SearchIndex
 from repo_lens.rag.types import IndexedDocument
-
-
-def validate_document(document: IndexedDocument, index: int | None = None) -> None:
-    prefix = f"Document at index {index}: " if index is not None else ""
-
-    if not isinstance(document, dict):
-        raise TypeError(f"{prefix}Document must be a dictionary.")
-
-    if "content" not in document:
-        raise ValueError(f"{prefix}Document dictionary must contain a 'content' key.")
-
-    if not isinstance(document["content"], str):
-        raise TypeError(f"{prefix}Document 'content' must be a string.")
 
 
 class HybridRetriever:
@@ -82,14 +70,13 @@ class HybridRetriever:
         # Higher score = more relevant (appeared high across multiple indexes)
         return sum(1 / (k_rrf + rank) for rank in ranks if rank != float("inf"))
 
-    def reload(self, documents: list[IndexedDocument]) -> None:
-        self.clear()
-        self.add_documents(documents)
-
-    def clear(self) -> None:
+    def reload_bm25(self, documents: list[IndexedDocument]) -> None:
         for index in self._indexes:
-            if hasattr(index, "clear"):
+            if isinstance(index, BM25Index):
                 index.clear()
+                index.add_documents(documents)
+                return
+        raise RuntimeError("BM25 index not found")
 
     def __len__(self) -> int:
         return len(self._indexes[0])

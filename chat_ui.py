@@ -77,7 +77,7 @@ async def on_chat_start() -> None:
     msg.content = "Loading repository..."
     await msg.update()
 
-    app.document_indexer.load_from_store()
+    app.document_indexer.sync_bm25_from_store()
 
     msg.content = (
         f"Chatting about `{repo_context.key}`. Ask a question about this repo."
@@ -89,6 +89,13 @@ async def on_chat_start() -> None:
 async def ui_on_delegate(agent_name: str, task: str) -> None:
     async with cl.Step(name=delegation_label(agent_name), type="tool") as step:
         step.output = task
+
+
+async def ui_clear_cache(app: App, repo_context: RepoContext) -> None:
+    removed = await app.clear_cache(repo_context)
+    await cl.Message(
+        content=f"Cleared `{repo_context.key}` ({removed} chunks removed).",
+    ).send()
 
 
 @cl.on_message  # type: ignore[misc]
@@ -115,6 +122,10 @@ async def on_message(message: cl.Message) -> None:
     async with lock:
         app = cl.user_session.get("app")
         repo_context = cl.user_session.get("repo_context")
+
+        if message.content.strip().lower() == "/clear-cache":
+            await ui_clear_cache(app, repo_context)
+            return
 
         before = app.token_tracker.summary()
 

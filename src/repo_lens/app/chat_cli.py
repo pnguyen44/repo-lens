@@ -96,7 +96,7 @@ async def chat_loop(app: App, repo_context: RepoContext) -> None:
 
             if user_input.lower() == "/clear-cache":
                 print_status(label="Clearing cache", message=repo_context.key)
-                removed = app.clear_cache(repo_context=repo_context)
+                removed = await app.clear_cache(repo_context=repo_context)
                 print_status(
                     label="Cleared",
                     message=f"{repo_context.key} ({removed} chunks removed)",
@@ -139,7 +139,7 @@ async def main() -> None:
 
         app = App(config=config, github_mcp=github_mcp)
 
-        count = app.document_indexer.load_from_store()
+        count = app.document_indexer.sync_bm25_from_store()
         if count > 0:
             logger.info("Loaded %d chunks from persistent storage.", count)
 

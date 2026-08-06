@@ -14,10 +14,10 @@ class DocumentIndexer:
         self._vector_index = vector_index
         self._retriever = retriever
 
-    def load_from_store(self) -> int:
+    def sync_bm25_from_store(self) -> int:
         documents = self._vector_index.get_all_documents()
         if documents:
-            self._retriever.reload(documents)
+            self._retriever.reload_bm25(documents)
 
         return len(documents)
 
@@ -50,7 +50,7 @@ class DocumentIndexer:
         return len(stamped)
 
     def _sync_retriever(self) -> None:
-        self._retriever.reload(self._vector_index.get_all_documents())
+        self._retriever.reload_bm25(self._vector_index.get_all_documents())
 
     def clear_repo(self, repo: str) -> int:
         removed = self._vector_index.remove_from_collection("repo", repo)

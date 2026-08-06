@@ -13,7 +13,7 @@ def indexer_parts():
     return indexer, vector_index, retriever
 
 
-def test_load_from_store_with_docs(indexer_parts):
+def test_sync_bm25_from_store_with_docs(indexer_parts):
     indexer, vector_index, retriever = indexer_parts
     docs = [
         {"content": "chunk one", "repo": "org/repo"},
@@ -21,20 +21,20 @@ def test_load_from_store_with_docs(indexer_parts):
     ]
     vector_index.get_all_documents.return_value = docs
 
-    count = indexer.load_from_store()
+    count = indexer.sync_bm25_from_store()
 
     assert count == 2
-    retriever.reload.assert_called_once_with(docs)
+    retriever.reload_bm25.assert_called_once_with(docs)
 
 
-def test_load_from_store_empty(indexer_parts):
+def test_sync_bm25_from_store_empty(indexer_parts):
     indexer, vector_index, retriever = indexer_parts
     vector_index.get_all_documents.return_value = []
 
-    count = indexer.load_from_store()
+    count = indexer.sync_bm25_from_store()
 
     assert count == 0
-    retriever.reload.assert_not_called()
+    retriever.reload_bm25.assert_not_called()
 
 
 def test_file_is_indexed_true(indexer_parts):
@@ -95,5 +95,5 @@ def test_clear_repo(indexer_parts):
 
     assert removed == 65
     vector_index.remove_from_collection.assert_called_once_with("repo", "org/repo-a")
-    retriever.reload.assert_called_once_with(remaining_docs)
+    retriever.reload_bm25.assert_called_once_with(remaining_docs)
     retriever.add_documents.assert_not_called()

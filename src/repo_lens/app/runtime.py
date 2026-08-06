@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from typing import Callable
 
@@ -141,8 +142,10 @@ class App:
         logger.info("On-demand indexed %s (%d chunks)", path, count)
         return count
 
-    def clear_cache(self, repo_context: RepoContext) -> int:
-        return self.document_indexer.clear_repo(repo=repo_context.key)
+    async def clear_cache(self, repo_context: RepoContext) -> int:
+        return await asyncio.to_thread(
+            self.document_indexer.clear_repo, repo_context.key
+        )
 
     def _format_provider_model(self) -> str:
         return f"{self.config.provider}/{self.config.model}"
