@@ -51,11 +51,20 @@ def resolve_owner(config: Config) -> str:
             return owner
 
 
-async def resolve_repo(app: App, owner: str) -> str | None:
+async def resolve_repo(app: App, config: Config, owner: str) -> str | None:
     while True:
-        repo = input("> Repo name (or /back): ").strip()
-        if repo.lower() == "/back":
-            return None
+        if config.default_repo:
+            entered = input(
+                f"> Repo name [{config.default_repo}] (Enter to keep, or /back): "
+            ).strip()
+            if entered.lower() == "/back":
+                return None
+            repo = entered or config.default_repo
+        else:
+            repo = input("> Repo name (or /back): ").strip()
+            if repo.lower() == "/back":
+                return None
+
         repo_context = RepoContext(owner=owner, repo=repo)
         if await app.validate_repo(repo_context):
             return repo
@@ -66,7 +75,7 @@ async def select_repo(app: App, config: Config) -> tuple[str, str]:
     while True:
         owner = resolve_owner(config)
         print_status(label="Org", message=owner)
-        repo = await resolve_repo(app=app, owner=owner)
+        repo = await resolve_repo(app=app, config=config, owner=owner)
         if repo is None:
             continue
         return owner, repo
