@@ -18,7 +18,7 @@ AI-powered CLI and Chainlit UI for chatting about GitHub repositories. Uses RAG 
 
 ## Architecture
 
-A planner–delegate orchestrator routes each query to specialist agents (GitHub MCP tools and RAG over indexed repo content). See [DESIGN.md](DESIGN.md) for the sequence diagram and component responsibilities.
+A planner–delegate orchestrator routes each query to specialist agents (GitHub MCP tools and RAG over indexed repo content). See [ARCHITECTURE.md](ARCHITECTURE.md) for the sequence diagram, RAG pipeline, indexing lifecycle, and component responsibilities.
 
 ## Prerequisites
 
@@ -86,7 +86,7 @@ make down
 
 ## Chainlit UI
 
-A web chat UI over the same `App` / orchestrator stack as the CLI. Entry point is `chat_ui.py`. Protected by username/password login (set `APP_USER` and `APP_PASS` in `.env`).
+A web chat UI over the same `App` / orchestrator stack as the CLI. Entry point is `chat_ui.py`. Protected by username/password login (set `APP_USER` and `APP_PASS` in `.env`). See [chainlit.md](chainlit.md) for the welcome screen users see on first load.
 
 Qdrant uses port `6333`; Chainlit uses `8001` so they do not clash.
 
@@ -128,6 +128,8 @@ Indexes repository READMEs and uses hybrid search (vector + BM25) to provide rel
 ```bash
 make index
 ```
+
+Files are also indexed on demand as the LLM fetches them during a conversation. Use `/clear-cache` (CLI or Chainlit) to clear the indexed knowledge for the active repo; files are re-indexed automatically the next time they're fetched.
 
 ## RAG Evaluation
 
