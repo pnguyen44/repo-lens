@@ -8,6 +8,7 @@ from google.genai.errors import ClientError as GeminiClientError
 from repo_lens.agents.orchestrator import delegation_label
 from repo_lens.app.runtime import App
 from repo_lens.core.config import create_config
+from repo_lens.core.logging_config import configure_logging
 from repo_lens.core.mcp_client import create_github_client
 from repo_lens.core.repo_context import RepoContext
 from repo_lens.core.retry import format_rate_limit_message
@@ -23,6 +24,7 @@ def _validate_auth_env() -> None:
         )
 
 
+configure_logging(os.getenv("LOG_LEVEL", "INFO"))
 _validate_auth_env()
 
 

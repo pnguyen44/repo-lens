@@ -10,6 +10,12 @@ NOISY_LOGGERS = (
     "google_genai",
     "anthropic",
     "asyncio",
+    # Chainlit / uvicorn stack (created after module import)
+    "engineio",
+    "socketio",
+    "uvicorn",
+    "chainlit",
+    "watchfiles",
 )
 
 
@@ -46,6 +52,11 @@ def configure_logging(log_level: str = "INFO") -> None:
     root_logger.setLevel(log_level.upper())
 
     noisy_level = logging.DEBUG if log_level.upper() == "DEBUG" else logging.WARNING
+
+    for prefix in NOISY_LOGGERS:
+        lib_logger = logging.getLogger(prefix)
+        lib_logger.handlers.clear()
+        lib_logger.setLevel(noisy_level)
 
     for name in logging.root.manager.loggerDict:
         lib_logger = logging.getLogger(name)
