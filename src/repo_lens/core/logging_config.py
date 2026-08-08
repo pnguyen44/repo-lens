@@ -2,6 +2,16 @@ import logging
 
 import structlog
 
+NOISY_LOGGERS = (
+    "httpx",
+    "httpcore",
+    "mcp",
+    "chromadb",
+    "google_genai",
+    "anthropic",
+    "asyncio",
+)
+
 
 def configure_logging(log_level: str = "INFO") -> None:
     shared_processors = [
@@ -35,7 +45,12 @@ def configure_logging(log_level: str = "INFO") -> None:
     root_logger.addHandler(handler)
     root_logger.setLevel(log_level.upper())
 
+    noisy_level = logging.DEBUG if log_level.upper() == "DEBUG" else logging.WARNING
+
     for name in logging.root.manager.loggerDict:
         lib_logger = logging.getLogger(name)
         lib_logger.handlers.clear()
-        lib_logger.setLevel(logging.NOTSET)
+        if any(name.startswith(prefix) for prefix in NOISY_LOGGERS):
+            lib_logger.setLevel(noisy_level)
+        else:
+            lib_logger.setLevel(logging.NOTSET)
