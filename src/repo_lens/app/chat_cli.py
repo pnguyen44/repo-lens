@@ -7,8 +7,9 @@ from contextlib import AsyncExitStack
 from rich import print
 
 from repo_lens.agents.orchestrator import delegation_label
+from repo_lens.app.repo_selection import select_repo
 from repo_lens.app.runtime import App
-from repo_lens.core.config import Config, create_config
+from repo_lens.core.config import create_config
 from repo_lens.core.logging_config import configure_logging
 from repo_lens.core.mcp_client import create_github_client
 from repo_lens.core.repo_context import RepoContext
@@ -39,46 +40,6 @@ def flush_stdin() -> None:
                 break
     except (ImportError, OSError, ValueError):
         pass
-
-
-def resolve_owner(config: Config) -> str:
-    if config.default_org:
-        entered = input(f"> Org [{config.default_org}] (Enter to keep): ").strip()
-        return entered or config.default_org
-    while True:
-        owner = input("> Org:").strip()
-        if owner:
-            return owner
-
-
-async def resolve_repo(app: App, config: Config, owner: str) -> str | None:
-    while True:
-        if config.default_repo:
-            entered = input(
-                f"> Repo name [{config.default_repo}] (Enter to keep, or /back): "
-            ).strip()
-            if entered.lower() == "/back":
-                return None
-            repo = entered or config.default_repo
-        else:
-            repo = input("> Repo name (or /back): ").strip()
-            if repo.lower() == "/back":
-                return None
-
-        repo_context = RepoContext(owner=owner, repo=repo)
-        if await app.validate_repo(repo_context):
-            return repo
-
-
-async def select_repo(app: App, config: Config) -> tuple[str, str]:
-    flush_stdin()
-    while True:
-        owner = resolve_owner(config)
-        print_status(label="Org", message=owner)
-        repo = await resolve_repo(app=app, config=config, owner=owner)
-        if repo is None:
-            continue
-        return owner, repo
 
 
 async def cli_on_delegate(agent_name: str, task: str) -> None:
@@ -135,6 +96,17 @@ async def chat_loop(app: App, repo_context: RepoContext) -> None:
         )
 
 
+async def on_status(label: str, message: str) -> None:
+    print_status(label=label, message=message)
+
+
+async def cli_ask(prompt: str) -> str | None:
+    try:
+        return input(f"> {prompt}: ")
+    except (EOFError, KeyboardInterrupt):
+        return None
+
+
 async def main() -> None:
     configure_logging(os.getenv("LOG_LEVEL", "INFO"))
     config = create_config()
@@ -152,9 +124,11 @@ async def main() -> None:
         if count > 0:
             logger.info("Loaded %d chunks from persistent storage.", count)
 
-        owner, repo = await select_repo(app=app, config=config)
+        flush_stdin()
+        owner, repo = await select_repo(
+            app=app, config=config, ask=cli_ask, on_status=on_status
+        )
         repo_context = RepoContext(repo=repo, owner=owner)
-
         print_status(label="Chatting about", message=repo_context.key)
 
         await chat_loop(app=app, repo_context=repo_context)
