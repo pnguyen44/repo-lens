@@ -5,6 +5,21 @@ from repo_lens.core.config import Config
 from repo_lens.core.repo_context import RepoContext
 
 
+def parse_owner_repo(value: str) -> tuple[str, str] | None:
+    cleaned = value.strip()
+    if cleaned.count("/") != 1:
+        return None
+
+    owner, repo = cleaned.split("/", 1)
+    owner = owner.strip()
+    repo = repo.strip()
+
+    if not owner or not repo:
+        return None
+
+    return owner, repo
+
+
 class AskCallback(Protocol):
     async def __call__(self, prompt: str) -> str | None:
         """Return the user's answer, or None to signal give up (e.g. timeout)."""
@@ -61,3 +76,21 @@ async def select_repo(
         if repo is None:
             continue
         return owner, repo
+
+
+async def resolve_repo_from_arg(
+    app: App, arg: str
+) -> tuple[RepoContext, None] | tuple[None, str]:
+    parsed = parse_owner_repo(arg)
+    if parsed is None:
+        return (
+            None,
+            "Usage: /repo owner/repo (e.g. openshift-hyperfleet/hyperfleet-api)",
+        )
+
+    owner, repo = parsed
+    repo_context = RepoContext(owner=owner, repo=repo)
+    if await app.validate_repo(repo_context):
+        return repo_context, None
+
+    return None, (f"Could not access `{owner}/{repo}`. Check the name and try again.")

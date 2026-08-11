@@ -11,3 +11,7 @@ An AI-powered tool for exploring and understanding GitHub repositories.
 ## Commands
 
 - `/clear-cache` — clear the indexed knowledge for the active repo. Files are re-indexed automatically the next time they're fetched.
+- `/repo owner/repo` — switch the active repository mid-chat.
+  - **Syntax:** `/repo owner/repo`
+  - **Example:** `/repo openshift-hyperfleet/hyperfleet-api`
+  - **Notes:** owner and repo names are case-sensitive; only public repositories are accessible.
