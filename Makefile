@@ -12,9 +12,11 @@ run-cli:
 	docker compose run --rm app
 
 run-ui:
+	@echo "Open http://localhost:8001"
 	PYTHONPATH=src uv run chainlit run chat_ui.py --port 8001 -w
 
 run-ui-docker:
+	@echo "Open http://localhost:8001"
 	docker compose up --build qdrant chroma app-ui
 
 down:

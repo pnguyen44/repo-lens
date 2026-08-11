@@ -137,7 +137,6 @@ class Chat:
             ) as stream:
                 for chunk in stream:
                     if chunk.type == "text":
-                        print(chunk.text, end="", flush=True)
                         text += chunk.text
                         had_output = True
                     elif chunk.type == "tool_start":
@@ -146,13 +145,6 @@ class Chat:
                     elif chunk.type == "tool_input":
                         if on_tool_input:
                             on_tool_input(chunk.partial_json)
-                    elif chunk.type == "tool_stop":
-                        if on_tool_input:
-                            print()
-
-                # End the streamed line so later log lines are not glued to the answer.
-                if text:
-                    print(flush=True)
 
                 response = stream.get_final_message()
 
@@ -191,11 +183,11 @@ class Chat:
             )
             return RunStatus.ERROR
         if self.chat_client.has_web_search_results(response.raw):
-            logger.info("Web search tool called")
+            logger.debug("Web search tool called")
 
         titles = self.chat_client.extract_citation_titles(response.raw)
         if titles:
-            print("\nSources: " + ", ".join(titles))
+            logger.debug("Sources: %s", ", ".join(titles))
 
         self.chat_client.add_assistant_message(self.messages, response)
 
@@ -214,7 +206,7 @@ class Chat:
             b.get("name") if isinstance(b, dict) else getattr(b, "name", None)
             for b in response.tool_calls
         ]
-        logger.info("Tool call: %s", tool_names)
+        logger.debug("Tool call: %s", tool_names)
 
         tool_result_parts = await ToolManager.execute_tool_requests(
             clients=self.mcp_clients,

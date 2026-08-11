@@ -192,7 +192,7 @@ class Orchestrator:
                     break
 
                 label = delegation_label(agent_name)
-                logger.info("%s: %s", label, task)
+                logger.debug("%s: %s", label, task)
                 if on_delegate:
                     await on_delegate(agent_name=agent_name, task=task)
 

@@ -268,7 +268,7 @@ class Gemini(ChatClient[GenaiClient]):
             return
 
         self.token_tracker.record(usage)
-        logger.info(
+        logger.debug(
             "Tokens: in=%d out=%d",
             usage.get("input_tokens", 0),
             usage.get("output_tokens", 0),

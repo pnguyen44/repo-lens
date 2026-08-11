@@ -50,42 +50,49 @@ async def on_chat_start() -> None:
     msg = cl.Message(content="Setting up...")
     await msg.send()
 
-    config = create_config()
-    github_mcp = create_github_client(config.github_token)
-    await github_mcp.connect()
-    cl.user_session.set("github_mcp", github_mcp)
+    try:
+        config = create_config()
+        github_mcp = create_github_client(config.github_token)
+        await github_mcp.connect()
+        cl.user_session.set("github_mcp", github_mcp)
 
-    owner = config.default_org
-    repo = config.default_repo
-    if owner is None or repo is None:
-        raise ValueError("DEFAULT_ORG and DEFAULT_REPO must be set in .env")
+        owner = config.default_org
+        repo = config.default_repo
+        if owner is None or repo is None:
+            raise ValueError("DEFAULT_ORG and DEFAULT_REPO must be set in .env")
 
-    app = App(config=config, github_mcp=github_mcp)
-    cl.user_session.set("app", app)
+        app = App(config=config, github_mcp=github_mcp)
+        cl.user_session.set("app", app)
 
-    repo_context = RepoContext(owner=owner, repo=repo)
+        repo_context = RepoContext(owner=owner, repo=repo)
 
-    if not await app.validate_repo(repo_context):
+        if not await app.validate_repo(repo_context):
+            msg.content = (
+                f"Could not access `{repo_context.key}`. Check that DEFAULT_ORG/DEFAULT_REPO "
+                "are correct and the GitHub token has access."
+            )
+            await msg.update()
+            cl.user_session.set("setup_error", msg.content)
+            return
+
+        cl.user_session.set("repo_context", repo_context)
+
+        msg.content = "Loading repository..."
+        await msg.update()
+
+        app.document_indexer.sync_bm25_from_store()
+
         msg.content = (
-            f"Could not access `{repo_context.key}`. Check that DEFAULT_ORG/DEFAULT_REPO "
-            "are correct and the GitHub token has access."
+            f"Chatting about `{repo_context.key}`. Ask a question about this repo."
         )
         await msg.update()
-        cl.user_session.set("setup_error", msg.content)
-        return
-
-    cl.user_session.set("repo_context", repo_context)
-
-    msg.content = "Loading repository..."
-    await msg.update()
-
-    app.document_indexer.sync_bm25_from_store()
-
-    msg.content = (
-        f"Chatting about `{repo_context.key}`. Ask a question about this repo."
-    )
-    await msg.update()
-    startup_ready.set()
+        startup_ready.set()
+    except Exception as e:
+        logger.exception("Startup failed: %s", e)
+        error_msg = "Setup failed. Please refresh and try again."
+        msg.content = error_msg
+        await msg.update()
+        cl.user_session.set("setup_error", error_msg)
 
 
 async def ui_on_delegate(agent_name: str, task: str) -> None:
@@ -100,17 +107,16 @@ async def ui_clear_cache(app: App, repo_context: RepoContext) -> None:
     ).send()
 
 
-@cl.on_message  # type: ignore[misc]
-async def on_message(message: cl.Message) -> None:
+async def _reject_if_not_ready() -> bool:
     setup_error = cl.user_session.get("setup_error")
     if setup_error:
         await cl.Message(content=setup_error).send()
-        return
+        return True
 
     startup_ready: asyncio.Event | None = cl.user_session.get("startup_ready")
     if startup_ready is None or not startup_ready.is_set():
         await cl.Message(content="Still setting up. Please wait a moment.").send()
-        return
+        return True
 
     lock: asyncio.Lock = cl.user_session.get("message_lock")
 
@@ -118,8 +124,53 @@ async def on_message(message: cl.Message) -> None:
         await cl.Message(
             content="Still working on your previous message. Please wait for it to finish"
         ).send()
+        return True
 
+    return False
+
+
+async def ui_run_query(app: App, repo_context: RepoContext, query: str) -> None:
+    before = app.token_tracker.summary()
+
+    try:
+
+        async def on_file_fetched(path: str) -> None:
+            await app.index_file_if_needed(repo_context, path)
+
+        answer = await app.orchestrator.run(
+            query=query,
+            repo_context=repo_context,
+            on_delegate=ui_on_delegate,
+            on_file_fetched=on_file_fetched,
+        )
+    except StreamError as e:
+        logger.error("Provider stream error: %s", e)
+        await cl.Message(content=format_rate_limit_message(str(e))).send()
         return
+    except GeminiClientError as e:
+        if e.code != 429:
+            raise
+        detail = getattr(e, "message", str(e))
+        logger.error("Gemini rate limit: %s", detail)
+        await cl.Message(content=format_rate_limit_message(detail)).send()
+        return
+    except Exception as e:
+        logger.exception("Unexpected chat error: %s", e)
+        await cl.Message(
+            content="Something went wrong. Please try again in a moment."
+        ).send()
+        return
+
+    await cl.Message(content=answer or "No response generated.").send()
+    await cl.Message(content=f"_Tokens: {app.format_tokens_for_turn(before)}_").send()
+
+
+@cl.on_message  # type: ignore[misc]
+async def on_message(message: cl.Message) -> None:
+    if await _reject_if_not_ready():
+        return
+
+    lock: asyncio.Lock = cl.user_session.get("message_lock")
 
     async with lock:
         app = cl.user_session.get("app")
@@ -129,41 +180,7 @@ async def on_message(message: cl.Message) -> None:
             await ui_clear_cache(app, repo_context)
             return
 
-        before = app.token_tracker.summary()
-
-        try:
-
-            async def on_file_fetched(path: str) -> None:
-                await app.index_file_if_needed(repo_context, path)
-
-            answer = await app.orchestrator.run(
-                query=message.content,
-                repo_context=repo_context,
-                on_delegate=ui_on_delegate,
-                on_file_fetched=on_file_fetched,
-            )
-        except StreamError as e:
-            logger.error("Provider stream error: %s", e)
-            await cl.Message(content=format_rate_limit_message(str(e))).send()
-            return
-        except GeminiClientError as e:
-            if e.code != 429:
-                raise
-            detail = getattr(e, "message", str(e))
-            logger.error("Gemini rate limit: %s", detail)
-            await cl.Message(content=format_rate_limit_message(detail)).send()
-            return
-        except Exception as e:
-            logger.exception("Unexpected chat error: %s", e)
-            await cl.Message(
-                content="Something went wrong. Please try again in a moment."
-            ).send()
-            return
-
-        await cl.Message(content=answer or "No response generated.").send()
-        await cl.Message(
-            content=f"_Tokens: {app.format_tokens_for_turn(before)}_"
-        ).send()
+        await ui_run_query(app=app, repo_context=repo_context, query=message.content)
 
 
 @cl.on_chat_end  # type: ignore[misc]

@@ -88,7 +88,7 @@ class ToolManager:
                 tool_output: CallToolResult | None = await client.call_tool(
                     tool_name, tool_input
                 )
-                logger.info("tool call: %s(%s)", tool_name, tool_input)
+                logger.debug("tool call: %s(%s)", tool_name, tool_input)
 
                 items = []
                 if tool_output:
@@ -96,7 +96,7 @@ class ToolManager:
                 content_list = [
                     item.text for item in items if isinstance(item, TextContent)
                 ]
-                logger.info("tool result: %s", content_list)
+                logger.debug("tool result: %s", content_list)
 
                 result_status: Literal["success", "error"] = (
                     "error" if tool_output and tool_output.isError else "success"

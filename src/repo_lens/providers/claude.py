@@ -196,7 +196,7 @@ class Claude(ChatClient[Anthropic]):
         }
 
         self.token_tracker.record(usage_payload)
-        logger.info(
+        logger.debug(
             "Tokens: in=%d out=%d cache_read=%d",
             input_tokens,
             output_tokens,
