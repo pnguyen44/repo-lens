@@ -90,7 +90,8 @@ make down
 Available in both the CLI and Chainlit UI:
 
 - `/clear-cache` — clear indexed knowledge for the active repo
-- `/repo owner/repo` — switch the active repository
+- `/org <name>` — set the active org for short `/repo <repo-name>` switches
+- `/repo owner/repo` — switch the active repository (or `/repo <repo-name>` after `/org`)
 - `quit` / `exit` — leave the CLI
 
 See [chainlit.md](chainlit.md) for syntax, examples, and notes.

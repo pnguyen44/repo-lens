@@ -7,23 +7,22 @@ from google.genai.errors import ClientError as GeminiClientError
 
 from repo_lens.agents.orchestrator import delegation_label
 from repo_lens.app.repo_selection import (
-    repo_ready_message,
-    resolve_repo_from_arg,
+    ChatRepoState,
+    handle_command,
     setup_repo,
 )
 from repo_lens.app.runtime import App
 from repo_lens.core.config import create_config
 from repo_lens.core.logging_config import configure_logging
 from repo_lens.core.mcp_client import create_github_client
-from repo_lens.core.repo_context import RepoContext
 from repo_lens.core.retry import format_rate_limit_message
 from repo_lens.providers.chat_client import StreamError
 
 logger = logging.getLogger(__name__)
 
 
-async def ui_send_repo_status(repo_key: str, *, switched: bool = False) -> None:
-    await cl.Message(content=repo_ready_message(repo_key, switched=switched)).send()
+async def ui_print_message(message: str, *, error: bool = False) -> None:
+    await cl.Message(content=message).send()
 
 
 def _validate_auth_env() -> None:
@@ -68,17 +67,19 @@ async def on_chat_start() -> None:
         app = App(config=config, github_mcp=github_mcp)
         cl.user_session.set("app", app)
 
-        async def on_status(label: str, message: str) -> None:
+        async def on_startup_message(message: str, *, error: bool = False) -> None:
             msg.content = message
             await msg.update()
-            if label == "Error":
+            if error:
                 cl.user_session.set("setup_error", message)
 
-        repo_context = await setup_repo(app=app, config=config, on_status=on_status)
+        repo_context = await setup_repo(
+            app=app, config=config, on_message=on_startup_message
+        )
         if repo_context is None:
             return
 
-        cl.user_session.set("repo_context", repo_context)
+        cl.user_session.set("chat_state", ChatRepoState.from_context(repo_context))
         startup_ready.set()
     except Exception as e:
         logger.exception("Startup failed: %s", e)
@@ -91,13 +92,6 @@ async def on_chat_start() -> None:
 async def ui_on_delegate(agent_name: str, task: str) -> None:
     async with cl.Step(name=delegation_label(agent_name), type="tool") as step:
         step.output = task
-
-
-async def ui_clear_cache(app: App, repo_context: RepoContext) -> None:
-    removed = await app.clear_cache(repo_context)
-    await cl.Message(
-        content=f"Cleared `{repo_context.key}` ({removed} chunks removed).",
-    ).send()
 
 
 async def _reject_if_not_ready() -> bool:
@@ -122,17 +116,17 @@ async def _reject_if_not_ready() -> bool:
     return False
 
 
-async def ui_run_query(app: App, repo_context: RepoContext, query: str) -> None:
+async def ui_run_query(app: App, state: ChatRepoState, query: str) -> None:
     before = app.token_tracker.summary()
 
     try:
 
         async def on_file_fetched(path: str) -> None:
-            await app.index_file_if_needed(repo_context, path)
+            await app.index_file_if_needed(state.repo_context, path)
 
         answer = await app.orchestrator.run(
             query=query,
-            repo_context=repo_context,
+            repo_context=state.repo_context,
             on_delegate=ui_on_delegate,
             on_file_fetched=on_file_fetched,
         )
@@ -158,18 +152,6 @@ async def ui_run_query(app: App, repo_context: RepoContext, query: str) -> None:
     await cl.Message(content=f"_Tokens: {app.format_tokens_for_turn(before)}_").send()
 
 
-async def ui_switch_repo(app: App, arg: str) -> None:
-    repo_context, err = await resolve_repo_from_arg(app=app, arg=arg)
-    if err is not None:
-        await cl.Message(content=err).send()
-        return
-    if repo_context is None:
-        return
-
-    cl.user_session.set("repo_context", repo_context)
-    await ui_send_repo_status(repo_context.key, switched=True)
-
-
 @cl.on_message  # type: ignore[misc]
 async def on_message(message: cl.Message) -> None:
     if await _reject_if_not_ready():
@@ -179,7 +161,7 @@ async def on_message(message: cl.Message) -> None:
 
     async with lock:
         app = cl.user_session.get("app")
-        repo_context = cl.user_session.get("repo_context")
+        state: ChatRepoState = cl.user_session.get("chat_state")
 
         stripped = message.content.strip()
         if not stripped:
@@ -187,17 +169,18 @@ async def on_message(message: cl.Message) -> None:
 
         parts = stripped.split(maxsplit=1)
         command = parts[0].lower()
+        arg = parts[1] if len(parts) > 1 else ""
 
-        match command:
-            case "/clear-cache":
-                await ui_clear_cache(app, repo_context)
-            case "/repo":
-                arg = parts[1] if len(parts) > 1 else ""
-                await ui_switch_repo(app=app, arg=arg)
-            case _:
-                await ui_run_query(
-                    app=app, repo_context=repo_context, query=message.content
-                )
+        if await handle_command(
+            app=app,
+            state=state,
+            command=command,
+            arg=arg,
+            on_message=ui_print_message,
+        ):
+            return
+
+        await ui_run_query(app=app, state=state, query=message.content)
 
 
 @cl.on_chat_end  # type: ignore[misc]

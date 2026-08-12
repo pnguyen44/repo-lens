@@ -7,8 +7,8 @@ from rich import print
 
 from repo_lens.agents.orchestrator import delegation_label
 from repo_lens.app.repo_selection import (
-    repo_ready_message,
-    resolve_repo_from_arg,
+    ChatRepoState,
+    handle_command,
     setup_repo,
 )
 from repo_lens.app.runtime import App
@@ -18,6 +18,13 @@ from repo_lens.core.mcp_client import create_github_client
 from repo_lens.core.repo_context import RepoContext
 
 logger = logging.getLogger(__name__)
+
+
+async def print_message(message: str, *, error: bool = False) -> None:
+    if error:
+        print(f"[red]{message}[/red]")
+    else:
+        print(message)
 
 
 def print_status(label: str, message: str) -> None:
@@ -36,11 +43,29 @@ def cli_on_tool_input(partial_json: str) -> None:
     print(partial_json, end="", flush=True)
 
 
-async def chat_loop(app: App, repo_context: RepoContext) -> None:
-    current_repo = repo_context
-
+async def run_chat_turn(app: App, state: ChatRepoState, query: str) -> None:
     async def on_file_fetched(path: str) -> None:
-        await app.index_file_if_needed(current_repo, path)
+        await app.index_file_if_needed(state.repo_context, path)
+
+    before = app.token_tracker.summary()
+    await app.orchestrator.run(
+        repo_context=state.repo_context,
+        query=query,
+        on_delegate=cli_on_delegate,
+        on_text=lambda t: print(t, end="", flush=True),
+        on_tool_start=cli_on_tool_start,
+        on_tool_input=cli_on_tool_input,
+        on_file_fetched=on_file_fetched,
+    )
+    print()
+    print_status(
+        label="Tokens",
+        message=app.format_tokens_for_turn(before),
+    )
+
+
+async def chat_loop(app: App, repo_context: RepoContext) -> None:
+    state = ChatRepoState.from_context(repo_context)
 
     try:
         while True:
@@ -55,44 +80,18 @@ async def chat_loop(app: App, repo_context: RepoContext) -> None:
 
             parts = stripped.split(maxsplit=1)
             command = parts[0].lower()
+            arg = parts[1] if len(parts) > 1 else ""
 
-            match command:
-                case "/clear-cache":
-                    print_status(label="Clearing cache", message=current_repo.key)
-                    removed = await app.clear_cache(repo_context=current_repo)
-                    print_status(
-                        label="Cleared",
-                        message=f"{current_repo.key} ({removed} chunks removed)",
-                    )
-                    continue
-                case "/repo":
-                    arg = parts[1] if len(parts) > 1 else ""
-                    new_ctx, err = await resolve_repo_from_arg(app=app, arg=arg)
-                    if err is not None:
-                        print(f"[red]{err}[/red]")
-                        continue
-                    if new_ctx is not None:
-                        current_repo = new_ctx
-                        print(
-                            repo_ready_message(repo_key=current_repo.key, switched=True)
-                        )
-                    continue
+            if await handle_command(
+                app=app,
+                state=state,
+                command=command,
+                arg=arg,
+                on_message=print_message,
+            ):
+                continue
+            await run_chat_turn(app=app, state=state, query=user_input)
 
-            before = app.token_tracker.summary()
-            await app.orchestrator.run(
-                repo_context=current_repo,
-                query=user_input,
-                on_delegate=cli_on_delegate,
-                on_text=lambda t: print(t, end="", flush=True),
-                on_tool_start=cli_on_tool_start,
-                on_tool_input=cli_on_tool_input,
-                on_file_fetched=on_file_fetched,
-            )
-            print()
-            print_status(
-                label="Tokens",
-                message=app.format_tokens_for_turn(before),
-            )
     except KeyboardInterrupt:
         print("\nexiting")
     finally:
@@ -100,10 +99,6 @@ async def chat_loop(app: App, repo_context: RepoContext) -> None:
             label="Tokens",
             message=app.format_token_summary(running_total=True),
         )
-
-
-async def on_status(label: str, message: str) -> None:
-    print_status(label=label, message=message)
 
 
 async def main() -> None:
@@ -119,7 +114,9 @@ async def main() -> None:
 
         app = App(config=config, github_mcp=github_mcp)
 
-        repo_context = await setup_repo(app=app, config=config, on_status=on_status)
+        repo_context = await setup_repo(
+            app=app, config=config, on_message=print_message
+        )
         if repo_context is None:
             return
 
