@@ -6,7 +6,11 @@ import chainlit as cl
 from google.genai.errors import ClientError as GeminiClientError
 
 from repo_lens.agents.orchestrator import delegation_label
-from repo_lens.app.repo_selection import resolve_repo_from_arg
+from repo_lens.app.repo_selection import (
+    repo_ready_message,
+    resolve_repo_from_arg,
+    setup_repo,
+)
 from repo_lens.app.runtime import App
 from repo_lens.core.config import create_config
 from repo_lens.core.logging_config import configure_logging
@@ -17,20 +21,9 @@ from repo_lens.providers.chat_client import StreamError
 
 logger = logging.getLogger(__name__)
 
-_REPO_SWITCH_HINT = "Use `/repo owner/repo` to switch repos."
-_REPO_PUBLIC_NOTE = "Only public repositories are accessible."
-
-
-def _repo_ready_message(repo_key: str, *, switched: bool = False) -> str:
-    label = "Now chatting about" if switched else "Chatting about"
-    message = f"{label} `{repo_key}`."
-    if not switched:
-        message = f"{message} {_REPO_SWITCH_HINT} {_REPO_PUBLIC_NOTE}"
-    return message
-
 
 async def ui_send_repo_status(repo_key: str, *, switched: bool = False) -> None:
-    await cl.Message(content=_repo_ready_message(repo_key, switched=switched)).send()
+    await cl.Message(content=repo_ready_message(repo_key, switched=switched)).send()
 
 
 def _validate_auth_env() -> None:
@@ -57,36 +50,6 @@ def auth_callback(username: str, password: str) -> cl.User | None:
     return None
 
 
-async def ui_bootstrap(msg: cl.Message) -> tuple[App, RepoContext] | None:
-    config = create_config()
-    github_mcp = create_github_client(config.github_token)
-    await github_mcp.connect()
-    cl.user_session.set("github_mcp", github_mcp)
-
-    owner = config.default_org
-    repo = config.default_repo
-    if owner is None or repo is None:
-        raise ValueError("DEFAULT_ORG and DEFAULT_REPO must be set in .env")
-
-    app = App(config=config, github_mcp=github_mcp)
-    cl.user_session.set("app", app)
-
-    repo_context = RepoContext(owner=owner, repo=repo)
-
-    if not await app.validate_repo(repo_context):
-        msg.content = (
-            f"Could not access `{repo_context.key}`. Check that DEFAULT_ORG/DEFAULT_REPO "
-            "are correct and the GitHub token has access."
-        )
-        await msg.update()
-        cl.user_session.set("setup_error", msg.content)
-        return None
-
-    cl.user_session.set("repo_context", repo_context)
-
-    return app, repo_context
-
-
 @cl.on_chat_start  # type: ignore[misc]
 async def on_chat_start() -> None:
     cl.user_session.set("message_lock", asyncio.Lock())
@@ -97,19 +60,25 @@ async def on_chat_start() -> None:
     await msg.send()
 
     try:
-        result = await ui_bootstrap(msg)
-        if result is None:
+        config = create_config()
+        github_mcp = create_github_client(config.github_token)
+        await github_mcp.connect()
+        cl.user_session.set("github_mcp", github_mcp)
+
+        app = App(config=config, github_mcp=github_mcp)
+        cl.user_session.set("app", app)
+
+        async def on_status(label: str, message: str) -> None:
+            msg.content = message
+            await msg.update()
+            if label == "Error":
+                cl.user_session.set("setup_error", message)
+
+        repo_context = await setup_repo(app=app, config=config, on_status=on_status)
+        if repo_context is None:
             return
 
-        app, repo_context = result
-
-        msg.content = "Loading repository..."
-        await msg.update()
-
-        app.document_indexer.sync_bm25_from_store()
-
-        msg.content = _repo_ready_message(repo_context.key)
-        await msg.update()
+        cl.user_session.set("repo_context", repo_context)
         startup_ready.set()
     except Exception as e:
         logger.exception("Startup failed: %s", e)
@@ -213,6 +182,9 @@ async def on_message(message: cl.Message) -> None:
         repo_context = cl.user_session.get("repo_context")
 
         stripped = message.content.strip()
+        if not stripped:
+            return
+
         parts = stripped.split(maxsplit=1)
         command = parts[0].lower()
 

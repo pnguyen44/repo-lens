@@ -9,6 +9,7 @@ AI-powered CLI and Chainlit UI for chatting about GitHub repositories. Uses RAG 
 - [Installation](#installation)
 - [Configuration](#configuration)
 - [Running the App](#running-the-app)
+- [Commands](#commands)
 - [Chainlit UI](#chainlit-ui)
 - [RAG Pipeline](#rag-pipeline)
 - [RAG Evaluation](#rag-evaluation)
@@ -51,13 +52,13 @@ At minimum, you need:
 - `GITHUB_TOKEN` — GitHub personal access token
 - An API key for your chosen provider (`ANTHROPIC_API_KEY` or `GEMINI_API_KEY`)
 - `VOYAGE_API_KEY` — VoyageAI API key for embeddings
+- `DEFAULT_ORG` — GitHub org/owner for the startup repo
+- `DEFAULT_REPO` — repository name
 
 See `.env.example` for all available options and defaults.
 
 For the Chainlit UI, also set:
 
-- `DEFAULT_ORG` — GitHub org/owner for the active repo
-- `DEFAULT_REPO` — repository name (no interactive picker yet)
 - `APP_USER` — username for the login page
 - `APP_PASS` — password for the login page
 - `CHAINLIT_AUTH_SECRET` — secret for signing auth tokens (generate with `openssl rand -base64 32`)
@@ -83,6 +84,16 @@ To stop all containers:
 ```bash
 make down
 ```
+
+## Commands
+
+Available in both the CLI and Chainlit UI:
+
+- `/clear-cache` — clear indexed knowledge for the active repo
+- `/repo owner/repo` — switch the active repository
+- `quit` / `exit` — leave the CLI
+
+See [chainlit.md](chainlit.md) for syntax, examples, and notes.
 
 ## Chainlit UI
 
@@ -129,7 +140,7 @@ Indexes repository READMEs and uses hybrid search (vector + BM25) to provide rel
 make index
 ```
 
-Files are also indexed on demand as the LLM fetches them during a conversation. Use `/clear-cache` (CLI or Chainlit) to clear the indexed knowledge for the active repo; files are re-indexed automatically the next time they're fetched.
+Files are also indexed on demand as the LLM fetches them during a conversation.
 
 ## RAG Evaluation
 
