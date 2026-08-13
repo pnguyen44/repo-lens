@@ -23,11 +23,13 @@ class QdrantVectorIndex(BaseVectorIndex):
         collection_name: str,
         embedding_fn: Callable[[list[str]], list[list[float]]] | None = None,
         url: str,
-        api_key: str,
+        api_key: str | None,
         vector_size: int = 1024,
     ) -> None:
         super().__init__(embedding_fn=embedding_fn)
-        self._client = QdrantClient(url=url, api_key=api_key)
+        self._client = QdrantClient(
+            url=url, api_key=api_key or None, check_compatibility=False
+        )
         self._collection_name = collection_name
 
         if not self._client.collection_exists(collection_name):

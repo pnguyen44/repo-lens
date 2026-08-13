@@ -34,7 +34,7 @@ def _create_vector_index(
             collection_name=COLLECTION_NAME,
             embedding_fn=embedding_fn,
             url=config.qdrant_url or "",
-            api_key=config.qdrant_api_key or "",
+            api_key=config.qdrant_api_key,
         )
 
     return ChromaVectorIndex(
