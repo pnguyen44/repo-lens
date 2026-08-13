@@ -57,7 +57,6 @@ services:
         "--port",
         "8001",
         "--headless",
-        "--watch",
       ]
     ports:
       - "8001:8001"

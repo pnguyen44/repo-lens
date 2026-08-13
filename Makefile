@@ -13,7 +13,8 @@ run-cli:
 
 run-ui:
 	@echo "Open http://localhost:8001"
-	PYTHONPATH=src uv run chainlit run chat_ui.py --port 8001 -w
+	docker compose up -d qdrant chroma
+	PYTHONPATH=src uv run chainlit run chat_ui.py --port 8001 --headless
 
 run-ui-docker:
 	@echo "Open http://localhost:8001"

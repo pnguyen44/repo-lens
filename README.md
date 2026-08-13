@@ -105,11 +105,17 @@ Qdrant uses port `6333`; Chainlit uses `8001` so they do not clash.
 **Local (uv):**
 
 ```bash
-make chroma
 make run-ui
 ```
 
-Open [http://localhost:8001](http://localhost:8001).
+Starts Qdrant and Chroma in Docker, then Chainlit locally. Open [http://localhost:8001](http://localhost:8001).
+
+To start only vector stores without the UI:
+
+```bash
+make chroma
+docker compose up -d qdrant
+```
 
 **Docker (same image as the CLI, different command):**
 
