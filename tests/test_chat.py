@@ -1,7 +1,10 @@
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
+from anthropic import RateLimitError as AnthropicRateLimitError
+from google.genai.errors import ClientError as GeminiClientError
 
 from repo_lens.agents.chat import Chat
 from repo_lens.agents.tool_manager import ToolManager
@@ -191,3 +194,37 @@ async def test_run_stops_at_max_tool_iterations() -> None:
 
     assert chat_client.chat_stream.call_count == 3
     assert execute_tools.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_run_raises_gemini_429_after_retries_exhausted() -> None:
+    chat_client = MagicMock()
+    chat_client.chat_stream.side_effect = GeminiClientError(
+        429, {"error": {"message": "Quota exceeded. Please retry in 0s."}}
+    )
+
+    chat = Chat(chat_client=chat_client, mcp_clients={})
+
+    with patch.object(ToolManager, "get_all_tools", new=AsyncMock(return_value=[])):
+        with pytest.raises(GeminiClientError) as exc_info:
+            await chat.run("test query")
+
+    assert exc_info.value.code == 429
+
+
+@pytest.mark.asyncio
+async def test_run_raises_anthropic_rate_limit_after_retries_exhausted() -> None:
+    response = httpx.Response(
+        429, request=httpx.Request("POST", "https://api.anthropic.com")
+    )
+
+    chat_client = MagicMock()
+    chat_client.chat_stream.side_effect = AnthropicRateLimitError(
+        "rate limited", response=response, body=None
+    )
+
+    chat = Chat(chat_client=chat_client, mcp_clients={})
+
+    with patch.object(ToolManager, "get_all_tools", new=AsyncMock(return_value=[])):
+        with pytest.raises(AnthropicRateLimitError):
+            await chat.run("test query")

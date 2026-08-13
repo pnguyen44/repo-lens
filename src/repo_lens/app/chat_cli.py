@@ -3,6 +3,8 @@ import logging
 import os
 from contextlib import AsyncExitStack
 
+from anthropic import RateLimitError as AnthropicRateLimitError
+from google.genai.errors import ClientError as GeminiClientError
 from rich import print
 
 from repo_lens.agents.orchestrator import delegation_label
@@ -16,6 +18,7 @@ from repo_lens.core.config import create_config
 from repo_lens.core.logging_config import configure_logging
 from repo_lens.core.mcp_client import create_github_client
 from repo_lens.core.repo_context import RepoContext
+from repo_lens.core.retry import format_rate_limit_message
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +93,16 @@ async def chat_loop(app: App, repo_context: RepoContext) -> None:
                 on_message=print_message,
             ):
                 continue
-            await run_chat_turn(app=app, state=state, query=user_input)
+
+            try:
+                await run_chat_turn(app=app, state=state, query=user_input)
+            except GeminiClientError as e:
+                if e.code != 429:
+                    raise
+                detail = getattr(e, "message", str(e))
+                await print_message(format_rate_limit_message(detail), error=True)
+            except AnthropicRateLimitError:
+                await print_message(format_rate_limit_message("rate limit"), error=True)
 
     except KeyboardInterrupt:
         print("\nexiting")

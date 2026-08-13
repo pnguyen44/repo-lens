@@ -282,9 +282,9 @@ class Chat:
                     logger.warning(
                         "Rate limited after partial stream output; not retrying."
                     )
-                    break
+                    raise
                 if await wait_for_retry(retries=retries, max_retries=MAX_RETRIES):
-                    break
+                    raise
                 retries += 1
                 continue
             except GeminiClientError as e:
@@ -294,13 +294,13 @@ class Chat:
                     logger.warning(
                         "Rate limited after partial stream output; not retrying."
                     )
-                    break
+                    raise
                 if await wait_for_retry(
                     retries=retries,
                     max_retries=MAX_RETRIES,
                     detail=getattr(e, "message", str(e)),
                 ):
-                    break
+                    raise
                 retries += 1
                 continue
             except StreamError as e:
