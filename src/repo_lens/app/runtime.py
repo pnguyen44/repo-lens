@@ -84,7 +84,9 @@ class App:
             config=self.config, token_tracker=self.token_tracker
         )
         github_agent = create_github_agent(
-            chat_client=github_chat_client, github_mcp=self.github_mcp
+            chat_client=github_chat_client,
+            github_mcp=self.github_mcp,
+            max_tool_iterations=self.config.max_tool_iterations,
         )
 
         rag_chat_client = create_chat_client(
@@ -94,6 +96,7 @@ class App:
             chat_client=rag_chat_client,
             hybrid_retriever=self.retriever,
             reranker=reranker,
+            max_tool_iterations=self.config.max_tool_iterations,
         )
 
         orchestrator_chat_client = create_chat_client(

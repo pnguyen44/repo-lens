@@ -12,6 +12,9 @@ class VectorStore(StrEnum):
     CHROMA = "chroma"
 
 
+DEFAULT_MAX_TOOL_ITERATIONS = 10
+
+
 @dataclass
 class Config:
     provider: str
@@ -26,6 +29,7 @@ class Config:
     vector_store: VectorStore
     qdrant_url: str | None
     qdrant_api_key: str | None
+    max_tool_iterations: int = DEFAULT_MAX_TOOL_ITERATIONS
 
 
 def create_config() -> Config:
@@ -41,6 +45,9 @@ def create_config() -> Config:
     vector_store = VectorStore(os.environ.get("VECTOR_STORE", "qdrant"))
     qdrant_url = os.environ.get("QDRANT_URL") or None
     qdrant_api_key = os.environ.get("QDRANT_API_KEY") or None
+    max_tool_iterations = int(
+        os.environ.get("MAX_TOOL_ITERATIONS", str(DEFAULT_MAX_TOOL_ITERATIONS))
+    )
 
     if provider == "anthropic" and not os.environ.get("ANTHROPIC_API_KEY", ""):
         raise ValueError("ANTHROPIC_API_KEY is missing a value. Update .env")
@@ -64,4 +71,5 @@ def create_config() -> Config:
         vector_store=vector_store,
         qdrant_url=qdrant_url,
         qdrant_api_key=qdrant_api_key,
+        max_tool_iterations=max_tool_iterations,
     )

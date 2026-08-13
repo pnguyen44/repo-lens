@@ -1,10 +1,12 @@
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from repo_lens.agents.chat import Chat
+from repo_lens.agents.tool_manager import ToolManager
 from repo_lens.core.repo_context import RepoContext
+from repo_lens.providers.chat_client import ChatResponse, StreamChunk, ToolCall
 from repo_lens.rag.hybrid_retriever import HybridRetriever
 from repo_lens.rag.vector_index import VectorIndex
 
@@ -144,3 +146,48 @@ def test_build_context_without_repo_context_passes_none() -> None:
     chat._build_context("test query")
 
     retriever.search.assert_called_once_with(query_text="test query", k=3, repo=None)
+
+
+def _make_stream(
+    response: ChatResponse, chunks: list[StreamChunk] | None = None
+) -> MagicMock:
+    chunk_list = chunks or []
+    stream = MagicMock()
+    stream.__enter__.return_value = stream
+    stream.__exit__.return_value = None
+    stream.__iter__.side_effect = lambda: iter(chunk_list)
+    stream.get_final_message.return_value = response
+    return stream
+
+
+@pytest.mark.asyncio
+async def test_run_stops_at_max_tool_iterations() -> None:
+    tool_call_response = ChatResponse(
+        stop_reason="tool_use",
+        text="",
+        tool_calls=[ToolCall(id="1", name="foo", input={})],
+        raw={"content": []},
+    )
+
+    chat_client = MagicMock()
+    chat_client.chat_stream.return_value = _make_stream(tool_call_response)
+
+    chat = Chat(
+        chat_client=chat_client,
+        mcp_clients={},
+        max_tool_iterations=2,
+    )
+    chat.tools = [{"name": "foo"}]
+
+    with (
+        patch.object(ToolManager, "get_all_tools", new=AsyncMock(return_value=[])),
+        patch.object(
+            ToolManager,
+            "execute_tool_requests",
+            new=AsyncMock(return_value=[]),
+        ) as execute_tools,
+    ):
+        await chat.run("test query")
+
+    assert chat_client.chat_stream.call_count == 3
+    assert execute_tools.await_count == 2

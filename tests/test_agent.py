@@ -8,6 +8,7 @@ from repo_lens.agents.agent import (
     create_github_agent,
     create_rag_agent,
 )
+from repo_lens.core.config import DEFAULT_MAX_TOOL_ITERATIONS
 from repo_lens.core.repo_context import RepoContext
 
 
@@ -19,6 +20,19 @@ def test_create_github_agent_wires_correct_config() -> None:
     assert agent.name == AgentName.GITHUB
     assert agent.chat.mcp_clients == {"github": github_mcp}
     assert agent.chat.web_search is False
+    assert agent.chat.max_tool_iterations == DEFAULT_MAX_TOOL_ITERATIONS
+
+
+def test_create_github_agent_wires_max_tool_iterations() -> None:
+    chat_client = MagicMock()
+    github_mcp = MagicMock()
+    agent = create_github_agent(
+        chat_client=chat_client,
+        github_mcp=github_mcp,
+        max_tool_iterations=3,
+    )
+
+    assert agent.chat.max_tool_iterations == 3
 
 
 def test_create_rag_agent_wires_correct_config() -> None:
@@ -33,6 +47,19 @@ def test_create_rag_agent_wires_correct_config() -> None:
     assert agent.chat.hybrid_retriever is retriever
     assert agent.chat.reranker is reranker
     assert agent.chat.web_search is False
+    assert agent.chat.max_tool_iterations == DEFAULT_MAX_TOOL_ITERATIONS
+
+
+def test_create_rag_agent_wires_max_tool_iterations() -> None:
+    chat_client = MagicMock()
+    retriever = MagicMock()
+    agent = create_rag_agent(
+        chat_client=chat_client,
+        hybrid_retriever=retriever,
+        max_tool_iterations=3,
+    )
+
+    assert agent.chat.max_tool_iterations == 3
 
 
 def test_create_rag_agent_without_reranker() -> None:

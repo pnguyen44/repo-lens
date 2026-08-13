@@ -9,6 +9,7 @@ from anthropic import RateLimitError as AnthropicRateLimitError
 from google.genai.errors import ClientError as GeminiClientError
 
 from repo_lens.agents.tool_manager import ToolManager
+from repo_lens.core.config import DEFAULT_MAX_TOOL_ITERATIONS
 from repo_lens.core.mcp_client import MCPClient
 from repo_lens.core.repo_context import RepoContext
 from repo_lens.core.retry import wait_for_retry
@@ -44,14 +45,15 @@ class RunStatus(Enum):
 class Chat:
     def __init__(
         self,
-        chat_client: ChatClientProtocol,
         *,
+        chat_client: ChatClientProtocol,
         mcp_clients: dict[str, MCPClient] | None = None,
         system_prompt: str | None = None,
         embedder: Embedder | None = None,
         hybrid_retriever: HybridRetriever | None = None,
         web_search: bool = True,
         reranker: Reranker | None = None,
+        max_tool_iterations: int = DEFAULT_MAX_TOOL_ITERATIONS,
     ) -> None:
         self.chat_client = chat_client
         self.mcp_clients = mcp_clients or {}
@@ -64,6 +66,7 @@ class Chat:
         self.reranker = reranker
         self.repo_context: RepoContext | None = None
         self._stream_had_output = False
+        self.max_tool_iterations = max_tool_iterations
 
     def _build_context(self, query: str) -> str | list[Any]:
         if not self.hybrid_retriever:
@@ -237,6 +240,7 @@ class Chat:
         await self._prepare_query(query)
 
         retries = 0
+        tool_rounds = 0
         while True:
             try:
                 response, text = self._stream_and_log(
@@ -248,6 +252,14 @@ class Chat:
 
                 status = self._process_response(response)
                 if status != RunStatus.TOOL_USE:
+                    break
+
+                tool_rounds += 1
+                if tool_rounds > self.max_tool_iterations:
+                    logger.warning(
+                        "Max tool iterations (%d) reached; stopping tool loop",
+                        self.max_tool_iterations,
+                    )
                     break
 
                 await self._execute_tools(response, on_file_fetched=on_file_fetched)

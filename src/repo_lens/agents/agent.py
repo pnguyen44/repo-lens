@@ -6,6 +6,7 @@ from repo_lens.agents.chat import (
     OnToolInputCallback,
     OnToolStartCallback,
 )
+from repo_lens.core.config import DEFAULT_MAX_TOOL_ITERATIONS
 from repo_lens.core.mcp_client import MCPClient
 from repo_lens.core.repo_context import RepoContext
 from repo_lens.providers.chat_client import ChatClientProtocol
@@ -44,13 +45,16 @@ class Agent:
 
 
 def create_github_agent(
-    chat_client: ChatClientProtocol, github_mcp: MCPClient
+    chat_client: ChatClientProtocol,
+    github_mcp: MCPClient,
+    max_tool_iterations: int = DEFAULT_MAX_TOOL_ITERATIONS,
 ) -> Agent:
     chat = Chat(
         chat_client=chat_client,
         mcp_clients={"github": github_mcp},
         system_prompt="You answer questions about Github repositories using the available tools.",
         web_search=False,
+        max_tool_iterations=max_tool_iterations,
     )
 
     return Agent(
@@ -64,6 +68,7 @@ def create_rag_agent(
     chat_client: ChatClientProtocol,
     hybrid_retriever: HybridRetriever,
     reranker: Reranker | None = None,
+    max_tool_iterations: int = DEFAULT_MAX_TOOL_ITERATIONS,
 ) -> Agent:
     chat = Chat(
         chat_client=chat_client,
@@ -76,6 +81,7 @@ def create_rag_agent(
         hybrid_retriever=hybrid_retriever,
         reranker=reranker,
         web_search=False,
+        max_tool_iterations=max_tool_iterations,
     )
 
     return Agent(
