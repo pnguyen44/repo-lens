@@ -9,24 +9,24 @@ doc1: IndexedDocument = {"content": "doc A"}
 doc2: IndexedDocument = {"content": "doc B"}
 
 
-def test_search_returns_closest_match() -> None:
+async def test_search_returns_closest_match() -> None:
     index = VectorIndex()
 
     index.add_vector(vec1, doc1)
     index.add_vector(vec2, doc2)
 
-    results = index.search(query=vec1, k=1)
+    results = await index.search(query=vec1, k=1)
 
     assert len(results) == 1
     assert results[0][0]["content"] == doc1["content"]
 
 
-def test_search_rejects_positional_query() -> None:
+async def test_search_rejects_positional_query() -> None:
     index = VectorIndex()
     index.add_vector(vec1, doc1)
 
     with pytest.raises(TypeError):
-        index.search(vec1, k=1)  # type: ignore[misc]
+        await index.search(vec1, k=1)  # type: ignore[misc]
 
 
 COSINE_CASES = [
@@ -82,33 +82,33 @@ def test_euclidean_distance(case) -> None:
     assert distance == pytest.approx(case["expected"])
 
 
-def test_search_empty_index_returns_empty() -> None:
+async def test_search_empty_index_returns_empty() -> None:
     index = VectorIndex()
-    results = index.search(query=vec1, k=1)
+    results = await index.search(query=vec1, k=1)
 
     assert results == []
 
 
-def test_search_returns_results_in_order() -> None:
+async def test_search_returns_results_in_order() -> None:
     index = VectorIndex()
     index.add_vector([1.0, 0.0, 0.0], {"content": "closest"})
     index.add_vector([0.9, 0.1, 0.0], {"content": "middle"})
     index.add_vector([0.0, 1.0, 0.0], {"content": "farthest"})
 
-    results = index.search(query=[1.0, 0.0, 0.0], k=3)
+    results = await index.search(query=[1.0, 0.0, 0.0], k=3)
 
     assert results[0][0]["content"] == "closest"
     assert results[1][0]["content"] == "middle"
     assert results[2][0]["content"] == "farthest"
 
 
-def test_search_respects_k() -> None:
+async def test_search_respects_k() -> None:
     index = VectorIndex()
     index.add_vector([1.0, 0.0], {"content": "a"})
     index.add_vector([0.0, 1.0], {"content": "b"})
     index.add_vector([0.5, 0.5], {"content": "c"})
 
-    results = index.search(query=[1.0, 0.0], k=2)
+    results = await index.search(query=[1.0, 0.0], k=2)
 
     assert len(results) == 2
 
@@ -121,27 +121,27 @@ def test_add_vector_rejects_mismatched_dimensions() -> None:
         index.add_vector([1.0, 0.0], {"content": "2d"})
 
 
-def test_add_document_raises_without_embedding_fn() -> None:
+async def test_add_document_raises_without_embedding_fn() -> None:
     index = VectorIndex()
 
     with pytest.raises(ValueError, match="Embedding function not provided"):
-        index.add_document({"content": "hello"})
+        await index.add_document({"content": "hello"})
 
 
-def test_add_document_uses_embedding_fn() -> None:
-    def fake_embed(texts: list[str]) -> list[list[float]]:
+async def test_add_document_uses_embedding_fn() -> None:
+    async def fake_embed(texts: list[str]) -> list[list[float]]:
         return [[1.0, 2.0, 3.0] for _ in texts]
 
     index = VectorIndex(embedding_fn=fake_embed)
 
-    index.add_document({"content": "hello"})
+    await index.add_document({"content": "hello"})
 
     assert len(index) == 1
     assert index.vectors[0] == [1.0, 2.0, 3.0]
 
 
-def test_add_documents_stores_all_documents() -> None:
-    def fake_embed(texts: list[str]) -> list[list[float]]:
+async def test_add_documents_stores_all_documents() -> None:
+    async def fake_embed(texts: list[str]) -> list[list[float]]:
         return [[float(i), 0.0, 0.0] for i in range(len(texts))]
 
     index = VectorIndex(embedding_fn=fake_embed)
@@ -151,7 +151,7 @@ def test_add_documents_stores_all_documents() -> None:
         {"content": "third", "section": "end"},
     ]
 
-    index.add_documents(docs)
+    await index.add_documents(docs)
 
     assert len(index) == 3
     assert index.documents[0]["content"] == "first"
@@ -159,33 +159,33 @@ def test_add_documents_stores_all_documents() -> None:
     assert index.vectors[1] == [1.0, 0.0, 0.0]
 
 
-def test_add_documents_raises_without_embedding_fn() -> None:
+async def test_add_documents_raises_without_embedding_fn() -> None:
     index = VectorIndex()
 
     with pytest.raises(ValueError, match="Embedding function not provided"):
-        index.add_documents([{"content": "hello"}])
+        await index.add_documents([{"content": "hello"}])
 
 
-def test_add_documents_validates_documents() -> None:
-    def fake_embed(texts: list[str]) -> list[list[float]]:
+async def test_add_documents_validates_documents() -> None:
+    async def fake_embed(texts: list[str]) -> list[list[float]]:
         return [[1.0, 0.0] for _ in texts]
 
     index = VectorIndex(embedding_fn=fake_embed)
 
     with pytest.raises(ValueError, match="Document at index 1"):
-        index.add_documents(
+        await index.add_documents(
             [{"content": "valid"}, {"wrong_key": "invalid"}]  # type: ignore[typeddict-item,typeddict-unknown-key]
         )
 
     assert len(index) == 0
 
 
-def test_add_documents_empty_list() -> None:
-    def fake_embed(texts: list[str]) -> list[list[float]]:
+async def test_add_documents_empty_list() -> None:
+    async def fake_embed(texts: list[str]) -> list[list[float]]:
         raise AssertionError("Should not be called")
 
     index = VectorIndex(embedding_fn=fake_embed)
 
-    index.add_documents([])
+    await index.add_documents([])
 
     assert len(index) == 0

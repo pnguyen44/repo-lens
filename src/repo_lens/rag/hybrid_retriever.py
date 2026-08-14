@@ -11,15 +11,15 @@ class HybridRetriever:
             raise ValueError("At least one index must be provided")
         self._indexes = list(indexes)
 
-    def add_document(self, document: IndexedDocument) -> None:
+    async def add_document(self, document: IndexedDocument) -> None:
         for index in self._indexes:
-            index.add_document(document)
+            await index.add_document(document)
 
-    def add_documents(self, documents: list[IndexedDocument]) -> None:
+    async def add_documents(self, documents: list[IndexedDocument]) -> None:
         for index in self._indexes:
-            index.add_documents(documents)
+            await index.add_documents(documents)
 
-    def search(
+    async def search(
         self,
         *,
         query_text: str,
@@ -36,7 +36,7 @@ class HybridRetriever:
 
         # Query each index and collect ranked results
         all_results = [
-            index.search(query=query_text, k=k * 5, repo=repo)
+            await index.search(query=query_text, k=k * 5, repo=repo)
             for index in self._indexes
         ]
 
@@ -70,11 +70,11 @@ class HybridRetriever:
         # Higher score = more relevant (appeared high across multiple indexes)
         return sum(1 / (k_rrf + rank) for rank in ranks if rank != float("inf"))
 
-    def reload_bm25(self, documents: list[IndexedDocument]) -> None:
+    async def reload_bm25(self, documents: list[IndexedDocument]) -> None:
         for index in self._indexes:
             if isinstance(index, BM25Index):
                 index.clear()
-                index.add_documents(documents)
+                await index.add_documents(documents)
                 return
         raise RuntimeError("BM25 index not found")
 

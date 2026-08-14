@@ -14,7 +14,7 @@ from repo_lens.rag.hybrid_retriever import HybridRetriever
 from repo_lens.rag.vector_index import VectorIndex
 
 
-def _fake_embed(texts: list[str]) -> list[list[float]]:
+async def _fake_embed(texts: list[str]) -> list[list[float]]:
     return [[1.0, 0.0, 0.0] for _ in texts]
 
 
@@ -99,13 +99,13 @@ CONTEXT_CASES = [
 
 
 @pytest.mark.parametrize("case", CONTEXT_CASES, ids=lambda c: c["name"])
-def test_build_context(case) -> None:
+async def test_build_context(case) -> None:
     index = VectorIndex(embedding_fn=_fake_embed)
     for vec, doc in case["vectors"]:
         index.add_vector(vec, doc)
 
     chat = _make_chat(index)
-    result = chat._build_context("test query")
+    result = await chat._build_context("test query")
 
     print("result", result)
 
@@ -118,35 +118,35 @@ def test_build_context(case) -> None:
         assert item not in flat
 
 
-def test_build_context_empty_index() -> None:
+async def test_build_context_empty_index() -> None:
     index = VectorIndex(embedding_fn=_fake_embed)
     chat = _make_chat(index)
-    result = chat._build_context("test query")
+    result = await chat._build_context("test query")
 
     assert result == ""
 
 
-def test_build_context_filters_by_repo_context_key() -> None:
-    retriever = MagicMock()
+async def test_build_context_filters_by_repo_context_key() -> None:
+    retriever = AsyncMock()
     retriever.search.return_value = []
 
     chat = Chat(chat_client=MagicMock(), hybrid_retriever=retriever)
     chat.repo_context = RepoContext(owner="org", repo="my-repo")
 
-    chat._build_context("test query")
+    await chat._build_context("test query")
 
     retriever.search.assert_called_once_with(
         query_text="test query", k=3, repo="org/my-repo"
     )
 
 
-def test_build_context_without_repo_context_passes_none() -> None:
-    retriever = MagicMock()
+async def test_build_context_without_repo_context_passes_none() -> None:
+    retriever = AsyncMock()
     retriever.search.return_value = []
 
     chat = Chat(chat_client=MagicMock(), hybrid_retriever=retriever)
 
-    chat._build_context("test query")
+    await chat._build_context("test query")
 
     retriever.search.assert_called_once_with(query_text="test query", k=3, repo=None)
 

@@ -30,7 +30,7 @@ class BM25Index:
         tokens = re.split(r"\W+", text)
         return [token for token in tokens if token]
 
-    def add_document(self, document: IndexedDocument) -> None:
+    async def add_document(self, document: IndexedDocument) -> None:
         validate_document(document)
 
         doc_tokens = self._tokenizer(document["content"])
@@ -39,7 +39,7 @@ class BM25Index:
         self.documents.append(document)
         self._update_doc_stats(doc_tokens)
 
-    def add_documents(self, documents: list[IndexedDocument]) -> None:
+    async def add_documents(self, documents: list[IndexedDocument]) -> None:
         if not documents:
             return
 
@@ -120,7 +120,7 @@ class BM25Index:
 
         return score
 
-    def search(
+    async def search(
         self,
         *,
         query: str,

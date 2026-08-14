@@ -1,5 +1,6 @@
+import asyncio
 import uuid
-from typing import Any, Callable
+from typing import Any, Awaitable, Callable
 
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
@@ -21,7 +22,7 @@ class QdrantVectorIndex(BaseVectorIndex):
         self,
         *,
         collection_name: str,
-        embedding_fn: Callable[[list[str]], list[list[float]]] | None = None,
+        embedding_fn: Callable[[list[str]], Awaitable[list[list[float]]]] | None = None,
         url: str,
         api_key: str | None,
         vector_size: int = 1024,
@@ -68,11 +69,13 @@ class QdrantVectorIndex(BaseVectorIndex):
                 doc[key] = value  # type: ignore[literal-required]
         return doc
 
-    def _store(self, vector: list[float], document: IndexedDocument) -> None:
+    async def _store(self, vector: list[float], document: IndexedDocument) -> None:
         point = self._construct_point(vector=vector, document=document)
-        self._client.upsert(collection_name=self._collection_name, points=[point])
+        await asyncio.to_thread(
+            self._client.upsert, collection_name=self._collection_name, points=[point]
+        )
 
-    def _store_batch(
+    async def _store_batch(
         self, vectors: list[list[float]], documents: list[IndexedDocument]
     ) -> None:
         points = []
@@ -80,15 +83,17 @@ class QdrantVectorIndex(BaseVectorIndex):
             point = self._construct_point(vector=vector, document=doc)
             points.append(point)
 
-        self._client.upsert(collection_name=self._collection_name, points=points)
+        await asyncio.to_thread(
+            self._client.upsert, collection_name=self._collection_name, points=points
+        )
 
-    def search(
+    async def search(
         self, *, query: Any, k: int = 1, repo: str | None = None
     ) -> list[tuple[IndexedDocument, float]]:
-        if len(self) == 0:
+        if await asyncio.to_thread(len, self) == 0:
             return []
 
-        query_vector = self._resolve_query_vector(query)
+        query_vector = await self._resolve_query_vector(query)
 
         query_filter = None
         if repo is not None:
@@ -96,7 +101,8 @@ class QdrantVectorIndex(BaseVectorIndex):
                 must=[FieldCondition(key="repo", match=MatchValue(value=repo))]
             )
 
-        results = self._client.query_points(
+        results = await asyncio.to_thread(
+            self._client.query_points,
             collection_name=self._collection_name,
             query=query_vector,
             query_filter=query_filter,
@@ -108,15 +114,16 @@ class QdrantVectorIndex(BaseVectorIndex):
             for point in results.points
         ]
 
-    def get_all_documents(self, limit: int = 100) -> list[IndexedDocument]:
-        if len(self) == 0:
+    async def get_all_documents(self, limit: int = 100) -> list[IndexedDocument]:
+        if await asyncio.to_thread(len, self) == 0:
             return []
 
         documents: list[IndexedDocument] = []
         offset = None
 
         while True:
-            results, offset = self._client.scroll(
+            results, offset = await asyncio.to_thread(
+                self._client.scroll,
                 collection_name=self._collection_name,
                 limit=limit,
                 offset=offset,
@@ -132,8 +139,11 @@ class QdrantVectorIndex(BaseVectorIndex):
 
         return documents
 
-    def exists_in_collection(self, metadata_key: str, metadata_value: str) -> bool:
-        results, _ = self._client.scroll(
+    async def exists_in_collection(
+        self, metadata_key: str, metadata_value: str
+    ) -> bool:
+        results, _ = await asyncio.to_thread(
+            self._client.scroll,
             collection_name=self._collection_name,
             scroll_filter=Filter(
                 must=[
@@ -149,9 +159,12 @@ class QdrantVectorIndex(BaseVectorIndex):
 
         return len(results) > 0
 
-    def remove_from_collection(self, metadata_key: str, metadata_value: str) -> int:
-        count_before = len(self)
-        self._client.delete(
+    async def remove_from_collection(
+        self, metadata_key: str, metadata_value: str
+    ) -> int:
+        count_before = await asyncio.to_thread(len, self)
+        await asyncio.to_thread(
+            self._client.delete,
             collection_name=self._collection_name,
             points_selector=FilterSelector(
                 filter=Filter(
@@ -164,7 +177,7 @@ class QdrantVectorIndex(BaseVectorIndex):
             ),
         )
 
-        return count_before - len(self)
+        return count_before - await asyncio.to_thread(len, self)
 
     def __len__(self) -> int:
         return int(self._client.count(collection_name=self._collection_name).count)

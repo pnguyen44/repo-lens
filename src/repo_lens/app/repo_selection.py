@@ -60,7 +60,7 @@ async def setup_repo(
         return None
 
     await on_message("Loading repository...")
-    app.document_indexer.sync_bm25_from_store()
+    await app.document_indexer.sync_bm25_from_store()
 
     await on_message(repo_ready_message(repo_context.key))
     return repo_context

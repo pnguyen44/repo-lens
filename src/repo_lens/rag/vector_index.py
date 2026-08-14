@@ -1,6 +1,6 @@
 import math
 from enum import Enum
-from typing import Any, Callable
+from typing import Any, Awaitable, Callable
 
 from repo_lens.rag.base_vector_index import BaseVectorIndex
 from repo_lens.rag.types import IndexedDocument
@@ -15,7 +15,7 @@ class VectorIndex(BaseVectorIndex):
     def __init__(
         self,
         distance_metric: DistanceMetric = DistanceMetric.COSINE,
-        embedding_fn: Callable[[list[str]], list[list[float]]] | None = None,
+        embedding_fn: Callable[[list[str]], Awaitable[list[list[float]]]] | None = None,
     ) -> None:
         super().__init__(embedding_fn=embedding_fn)
         self.vectors: list[list[float]] = []
@@ -47,10 +47,10 @@ class VectorIndex(BaseVectorIndex):
         self.vectors.append(list(vector))
         self.documents.append(document)
 
-    def _store(self, vector: list[float], document: IndexedDocument) -> None:
+    async def _store(self, vector: list[float], document: IndexedDocument) -> None:
         self.add_vector(vector=vector, document=document)
 
-    def _store_batch(
+    async def _store_batch(
         self, vectors: list[list[float]], documents: list[IndexedDocument]
     ) -> None:
         for vector, document in zip(vectors, documents):
@@ -81,13 +81,13 @@ class VectorIndex(BaseVectorIndex):
 
         return [(doc, dist) for dist, doc in distances[:k]]
 
-    def search(
+    async def search(
         self, *, query: Any, k: int = 1, repo: str | None = None
     ) -> list[tuple[IndexedDocument, float]]:
         if not self.vectors or self._vector_dim is None:
             return []
 
-        query_vector = self._resolve_query_vector(query)
+        query_vector = await self._resolve_query_vector(query)
         self._validate_search(query_vector, k)
 
         candidate_k = k if repo is None else len(self.vectors)

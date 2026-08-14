@@ -1,8 +1,7 @@
-import asyncio
 import logging
-from typing import Callable
+from typing import Awaitable, Callable
 
-from voyageai.client import Client as VoyageClient
+from voyageai.client_async import AsyncClient as VoyageAsyncClient
 
 from repo_lens.agents.agent import AgentName, create_github_agent, create_rag_agent
 from repo_lens.agents.orchestrator import Orchestrator
@@ -27,7 +26,7 @@ COLLECTION_NAME = "repo_lens"
 
 
 def _create_vector_index(
-    config: Config, embedding_fn: Callable[[list[str]], list[list[float]]]
+    config: Config, embedding_fn: Callable[[list[str]], Awaitable[list[list[float]]]]
 ) -> BaseVectorIndex:
     if config.vector_store == VectorStore.QDRANT:
         return QdrantVectorIndex(
@@ -59,10 +58,12 @@ class App:
         self.orchestrator = self._create_orchestrator()
 
     def _create_retriever_stack(self) -> tuple[BaseVectorIndex, HybridRetriever]:
-        embedder = VoyageEmbedder(VoyageClient(), model=self.config.voyage_embed_model)
+        embedder = VoyageEmbedder(
+            VoyageAsyncClient(), model=self.config.voyage_embed_model
+        )
 
-        def embedding_fn(texts: list[str]) -> list[list[float]]:
-            return embedder.generate_embeddings(
+        async def embedding_fn(texts: list[str]) -> list[list[float]]:
+            return await embedder.generate_embeddings(
                 texts=texts, input_type=InputType.DOCUMENT
             )
 
@@ -77,7 +78,7 @@ class App:
 
     def _create_orchestrator(self) -> Orchestrator:
         reranker = VoyageReranker(
-            client=VoyageClient(), model=self.config.voyage_rerank_model
+            client=VoyageAsyncClient(), model=self.config.voyage_rerank_model
         )
 
         github_chat_client = create_chat_client(
@@ -131,7 +132,9 @@ class App:
             logger.debug("Skipping on-demand index for excluded file: %s", path)
             return 0
 
-        if self.document_indexer.file_is_indexed(repo=repo_context.key, path=path):
+        if await self.document_indexer.file_is_indexed(
+            repo=repo_context.key, path=path
+        ):
             logger.debug("Skipping on-demand index, already indexed: %s", path)
             return 0
 
@@ -139,8 +142,7 @@ class App:
             mcp_client=self.github_mcp, repo_context=repo_context
         )
         docs = await fetcher.fetch_file_chunks(path)
-        count = await asyncio.to_thread(
-            self.document_indexer.index_file,
+        count = await self.document_indexer.index_file(
             repo=repo_context.key,
             path=path,
             documents=docs,
@@ -149,9 +151,7 @@ class App:
         return count
 
     async def clear_cache(self, repo_context: RepoContext) -> int:
-        return await asyncio.to_thread(
-            self.document_indexer.clear_repo, repo_context.key
-        )
+        return await self.document_indexer.clear_repo(repo_context.key)
 
     def _format_provider_model(self) -> str:
         return f"{self.config.provider}/{self.config.model}"

@@ -6,7 +6,7 @@ from repo_lens.rag.types import IndexedDocument
 fake_embedding = [1.0, 0.0, 0.0]
 
 
-def fake_embedding_fn(texts: list[str]) -> list[list[float]]:
+async def fake_embedding_fn(texts: list[str]) -> list[list[float]]:
     return [fake_embedding] * len(texts)
 
 
@@ -45,9 +45,9 @@ def chroma_index(tmp_path):
     return create_chroma_index(str(tmp_path))
 
 
-def test_add_documents_and_search(chroma_index) -> None:
-    chroma_index.add_documents([doc1, doc2, doc3])
-    results = chroma_index.search(query="Install instruction for API", k=1)
+async def test_add_documents_and_search(chroma_index) -> None:
+    await chroma_index.add_documents([doc1, doc2, doc3])
+    results = await chroma_index.search(query="Install instruction for API", k=1)
 
     assert len(results) == 1
     assert isinstance(results[0], tuple)
@@ -56,29 +56,29 @@ def test_add_documents_and_search(chroma_index) -> None:
     assert len(chroma_index) == 3
 
 
-def test_exists_in_collection(chroma_index) -> None:
-    chroma_index.add_documents([doc1])
+async def test_exists_in_collection(chroma_index) -> None:
+    await chroma_index.add_documents([doc1])
     assert (
-        chroma_index.exists_in_collection(
+        await chroma_index.exists_in_collection(
             metadata_key="repo", metadata_value="owner/repo-a"
         )
         is True
     )
 
 
-def test_remove_from_collection(chroma_index) -> None:
-    chroma_index.add_documents([doc1, doc2, doc3])
-    removed = chroma_index.remove_from_collection("repo", "owner/repo-a")
+async def test_remove_from_collection(chroma_index) -> None:
+    await chroma_index.add_documents([doc1, doc2, doc3])
+    removed = await chroma_index.remove_from_collection("repo", "owner/repo-a")
 
     assert removed == 2
-    assert chroma_index.exists_in_collection("repo", "owner/repo-a") is False
-    assert chroma_index.exists_in_collection("repo", "owner/repo-b") is True
+    assert await chroma_index.exists_in_collection("repo", "owner/repo-a") is False
+    assert await chroma_index.exists_in_collection("repo", "owner/repo-b") is True
     assert len(chroma_index) == 1
 
 
-def test_persistence_across_instances(tmp_path) -> None:
+async def test_persistence_across_instances(tmp_path) -> None:
     index1 = create_chroma_index(str(tmp_path))
-    index1.add_documents([doc1, doc2])
+    await index1.add_documents([doc1, doc2])
 
     index2 = create_chroma_index(str(tmp_path))
 

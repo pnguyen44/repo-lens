@@ -1,9 +1,8 @@
 import logging
+from enum import Enum
 from typing import Protocol
 
-from voyageai.client import Client as VoyageClient
-
-from enum import Enum
+from voyageai.client_async import AsyncClient as VoyageAsyncClient
 
 from repo_lens.rag.voyage import voyage_retry
 
@@ -16,17 +15,17 @@ class InputType(str, Enum):
 
 
 class Embedder(Protocol):
-    def generate_embeddings(
+    async def generate_embeddings(
         self, texts: list[str], input_type: InputType = InputType.QUERY
     ) -> list[list[float]]: ...
 
 
 class VoyageEmbedder:
-    def __init__(self, client: VoyageClient, model: str) -> None:
+    def __init__(self, client: VoyageAsyncClient, model: str) -> None:
         self.client = client
         self.model = model
 
-    def generate_embeddings(
+    async def generate_embeddings(
         self, texts: list[str], input_type: InputType = InputType.QUERY
     ) -> list[list[float]]:
         if not texts:
@@ -35,7 +34,7 @@ class VoyageEmbedder:
         if any(t == "" for t in texts):
             raise ValueError("texts must not contain empty strings")
 
-        result = voyage_retry(
+        result = await voyage_retry(
             fn=lambda: self.client.embed(
                 texts, model=self.model, input_type=input_type
             ),

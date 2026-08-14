@@ -3,7 +3,7 @@ import json
 import logging
 
 from mcp.types import EmbeddedResource, TextContent, TextResourceContents
-from voyageai.client import Client as VoyageClient
+from voyageai.client_async import AsyncClient as VoyageAsyncClient
 
 from repo_lens.core.config import create_config
 from repo_lens.core.mcp_client import MCPClient, create_github_client
@@ -133,7 +133,7 @@ def to_github_anchor(section: str) -> str:
 
 async def main() -> None:
     config = create_config()
-    embedder = VoyageEmbedder(VoyageClient(), model=config.voyage_embed_model)
+    embedder = VoyageEmbedder(VoyageAsyncClient(), model=config.voyage_embed_model)
     repo_context = RepoContext(owner="openshift-hyperfleet", repo="hyperfleet-api")
 
     vector_index = VectorIndex(
@@ -154,12 +154,12 @@ async def main() -> None:
 
     print(f"Indexed {count} chunks from {repo_context.key}\n")
 
-    retriever.add_documents(documents)
+    await retriever.add_documents(documents)
 
     query = "How does the API work?"
     print(f'Query: "{query}"\n')
 
-    results = retriever.search(query_text=query, k=NUM_RESULTS)
+    results = await retriever.search(query_text=query, k=NUM_RESULTS)
 
     for i, (doc, distance) in enumerate(results, 1):
         print(f"Result {i} (distance: {distance:.4f})")

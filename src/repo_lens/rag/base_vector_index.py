@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Callable
+from typing import Any, Awaitable, Callable
 
 from repo_lens.rag.types import IndexedDocument, validate_document
 
@@ -7,23 +7,25 @@ from repo_lens.rag.types import IndexedDocument, validate_document
 class BaseVectorIndex(ABC):
     def __init__(
         self,
-        embedding_fn: Callable[[list[str]], list[list[float]]] | None = None,
+        embedding_fn: Callable[[list[str]], Awaitable[list[list[float]]]] | None = None,
     ) -> None:
         self._embedding_fn = embedding_fn
 
-    def _require_embedding_fn(self) -> Callable[[list[str]], list[list[float]]]:
+    def _require_embedding_fn(
+        self,
+    ) -> Callable[[list[str]], Awaitable[list[list[float]]]]:
         if not self._embedding_fn:
             raise ValueError("Embedding function not provided during initialization.")
         return self._embedding_fn
 
-    def add_document(self, document: IndexedDocument) -> None:
+    async def add_document(self, document: IndexedDocument) -> None:
         validate_document(document)
         embed = self._require_embedding_fn()
         content = document["content"]
-        vector = embed([content])[0]
-        self._store(vector, document)
+        vector = (await embed([content]))[0]
+        await self._store(vector, document)
 
-    def add_documents(self, documents: list[IndexedDocument]) -> None:
+    async def add_documents(self, documents: list[IndexedDocument]) -> None:
         embed = self._require_embedding_fn()
 
         if not documents:
@@ -34,22 +36,22 @@ class BaseVectorIndex(ABC):
             validate_document(document=document, index=i)
             contents.append(document["content"])
 
-        vectors = embed(contents)
-        self._store_batch(vectors, documents)
+        vectors = await embed(contents)
+        await self._store_batch(vectors, documents)
 
-    def _resolve_query_vector(self, query: Any) -> list[float]:
+    async def _resolve_query_vector(self, query: Any) -> list[float]:
         if isinstance(query, str):
             embed = self._require_embedding_fn()
-            return embed([query])[0]
+            return (await embed([query]))[0]
         elif isinstance(query, list):
             return query
         else:
             raise TypeError("Query must be either a string or a list of numbers.")
 
     @abstractmethod
-    def _store(self, vector: list[float], document: IndexedDocument) -> None: ...
+    async def _store(self, vector: list[float], document: IndexedDocument) -> None: ...
 
     @abstractmethod
-    def _store_batch(
+    async def _store_batch(
         self, vectors: list[list[float]], documents: list[IndexedDocument]
     ) -> None: ...

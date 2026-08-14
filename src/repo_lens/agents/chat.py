@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import time
 from enum import Enum
@@ -68,13 +67,13 @@ class Chat:
         self._stream_had_output = False
         self.max_tool_iterations = max_tool_iterations
 
-    def _build_context(self, query: str) -> str | list[Any]:
+    async def _build_context(self, query: str) -> str | list[Any]:
         if not self.hybrid_retriever:
             return ""
 
         try:
             k = 15 if self.reranker else 3
-            results = self.hybrid_retriever.search(
+            results = await self.hybrid_retriever.search(
                 query_text=query,
                 k=k,
                 repo=self.repo_context.key if self.repo_context else None,
@@ -82,7 +81,9 @@ class Chat:
 
             if self.reranker:
                 docs = [doc["content"] for (doc, _dist) in results]
-                reranked = self.reranker.rerank(query=query, documents=docs, top_k=3)
+                reranked = await self.reranker.rerank(
+                    query=query, documents=docs, top_k=3
+                )
                 chunks = []
                 for r in reranked:
                     if 0 <= r.index < len(results):
@@ -115,7 +116,7 @@ class Chat:
         if not self.tools:
             self.tools = await ToolManager.get_all_tools(self.mcp_clients)
 
-        augmented_query = await asyncio.to_thread(self._build_context, query) or query
+        augmented_query = await self._build_context(query) or query
         self.chat_client.add_user_message(self.messages, augmented_query)
 
     def _stream_and_log(

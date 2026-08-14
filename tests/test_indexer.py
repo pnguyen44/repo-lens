@@ -11,7 +11,7 @@ from repo_lens.rag.vector_index import VectorIndex
 
 
 class FakeEmbedder:
-    def generate_embeddings(
+    async def generate_embeddings(
         self, texts: list[str], **kwargs: object
     ) -> list[list[float]]:
         return [[1.0, 0.0, 0.0] for _ in texts]
@@ -59,12 +59,12 @@ async def test_rag_end_to_end(mock_single_file, fake_embedder):
 
     docs = await make_fetcher(repo_context).fetch_repo_chunks()
 
-    retriever.add_documents(docs)
+    await retriever.add_documents(docs)
 
     assert len(docs) == 3
 
     query = "how does API work?"
-    results = retriever.search(query_text=query, k=2)
+    results = await retriever.search(query_text=query, k=2)
     assert len(results) > 0
     assert results[0][0]["repo"] == repo_context.key
     assert len(retriever) == 3

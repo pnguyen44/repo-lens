@@ -1,10 +1,11 @@
+import asyncio
 import logging
 import textwrap
 from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
-from voyageai.client import Client as VoyageClient
+from voyageai.client_async import AsyncClient as VoyageAsyncClient
 
 from repo_lens.agents.chat import MAX_RETRIES
 from repo_lens.core.config import create_config
@@ -39,7 +40,7 @@ class RAGEvaluator:
         self.fixture_path = fixture_path
         self.chat_client = chat_client
 
-    def load_and_index(self) -> int:
+    async def load_and_index(self) -> int:
         """Read the fixture README, chunk it, embed, and load into the index."""
         readme_text = self.fixture_path.read_text()
         chunks = [c for c in chunk_by_section(readme_text) if c.strip()]
@@ -47,7 +48,7 @@ class RAGEvaluator:
         if not chunks:
             return 0
 
-        vectors = self.embedder.generate_embeddings(
+        vectors = await self.embedder.generate_embeddings(
             texts=chunks, input_type=InputType.DOCUMENT
         )
 
@@ -109,17 +110,19 @@ class RAGEvaluator:
                 "reasoning": "Failed to parse grade",
             }
 
-    def evaluate_faithfulness(self, k: int = 3) -> list[dict[str, Any]]:
+    async def evaluate_faithfulness(self, k: int = 3) -> list[dict[str, Any]]:
         if not self.chat_client:
             return []
         results: list[dict[str, Any]] = []
         for case in self.eval_cases:
             question = str(case["question"])
             try:
-                query_vector = self.embedder.generate_embeddings(
-                    [question], input_type=InputType.QUERY
+                query_vector = (
+                    await self.embedder.generate_embeddings(
+                        [question], input_type=InputType.QUERY
+                    )
                 )[0]
-                hits = self.index.search(query=query_vector, k=k)
+                hits = await self.index.search(query=query_vector, k=k)
                 context = "\n".join([doc["content"] for doc, _dist in hits])
                 answer = self.generate_answer(context=context, question=question)
                 judgement = self.judge_faithfulness(
@@ -141,17 +144,17 @@ class RAGEvaluator:
         recall = len(true_positions) / len(expected) if expected else 0.0
         return precision, recall
 
-    def evaluate_retrieval(self, k: int = 3) -> list[dict[str, Any]]:
+    async def evaluate_retrieval(self, k: int = 3) -> list[dict[str, Any]]:
         """Run each eval case: embed the question, search, compute precision and recall."""
         questions: list[str] = [str(case["question"]) for case in self.eval_cases]
-        query_vectors = self.embedder.generate_embeddings(
+        query_vectors = await self.embedder.generate_embeddings(
             texts=questions, input_type=InputType.QUERY
         )
 
         results = []
 
         for case, query_vector in zip(self.eval_cases, query_vectors):
-            hits = self.index.search(query=query_vector, k=k)
+            hits = await self.index.search(query=query_vector, k=k)
             result: dict[str, Any] = {"question": case["question"]}
 
             if "expected_sections" in case:
@@ -219,12 +222,12 @@ class RAGEvaluator:
             )
 
 
-def main() -> None:
+async def main() -> None:
     load_dotenv()
     config = create_config()
     try:
         index = VectorIndex()
-        embedder = VoyageEmbedder(VoyageClient(), model=config.voyage_embed_model)
+        embedder = VoyageEmbedder(VoyageAsyncClient(), model=config.voyage_embed_model)
         chat_client = create_chat_client(config=config)
 
         rag_evaluator = RAGEvaluator(
@@ -234,9 +237,9 @@ def main() -> None:
             eval_cases=EVAL_CASES[:3],
             chat_client=chat_client,
         )
-        rag_evaluator.load_and_index()
-        results = rag_evaluator.evaluate_retrieval()
-        faithfulness_results = rag_evaluator.evaluate_faithfulness()
+        await rag_evaluator.load_and_index()
+        results = await rag_evaluator.evaluate_retrieval()
+        faithfulness_results = await rag_evaluator.evaluate_faithfulness()
         for r, f in zip(results, faithfulness_results):
             r["judgement"] = f["judgement"]
         rag_evaluator.print_results(results)
@@ -245,4 +248,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
