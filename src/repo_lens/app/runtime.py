@@ -139,8 +139,11 @@ class App:
             mcp_client=self.github_mcp, repo_context=repo_context
         )
         docs = await fetcher.fetch_file_chunks(path)
-        count = self.document_indexer.index_file(
-            repo=repo_context.key, path=path, documents=docs
+        count = await asyncio.to_thread(
+            self.document_indexer.index_file,
+            repo=repo_context.key,
+            path=path,
+            documents=docs,
         )
         logger.info("On-demand indexed %s (%d chunks)", path, count)
         return count
