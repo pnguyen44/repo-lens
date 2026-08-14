@@ -1,7 +1,8 @@
 import logging
-from typing import Any, Iterator, Unpack
+from collections.abc import AsyncIterator
+from typing import Any, Unpack
 
-from anthropic import Anthropic
+from anthropic import Anthropic, AsyncAnthropic
 from anthropic.types import Message, Usage
 
 from repo_lens.providers.chat_client import (
@@ -23,45 +24,41 @@ class ClaudeStream:
     def __init__(self, manager: Any) -> None:
         self._manager = manager
         self._message_stream: Any = None
-        self._response: Any = None
         self._text_parts: list[str] = []
         self._in_tool_block = False
 
-    def __enter__(self) -> "ClaudeStream":
-        self._message_stream = self._manager.__enter__()
+    async def __aenter__(self) -> "ClaudeStream":
+        self._message_stream = await self._manager.__aenter__()
         return self
 
-    def __exit__(self, *args: Any) -> None:
-        self._manager.__exit__(*args)
+    async def __aexit__(self, *args: Any) -> None:
+        await self._manager.__aexit__(*args)
 
-    def __iter__(self) -> Iterator[StreamChunk]:
-        return self
+    def __aiter__(self) -> AsyncIterator[StreamChunk]:
+        return self._iter_chunks()
 
-    def __next__(self) -> StreamChunk:
-        while True:
-            chunk = next(self._message_stream)
-
+    async def _iter_chunks(self) -> AsyncIterator[StreamChunk]:
+        async for chunk in self._message_stream:
             if chunk.type == "text":
                 self._text_parts.append(chunk.text)
-                return StreamChunk(type="text", text=chunk.text)
+                yield StreamChunk(type="text", text=chunk.text)
 
-            if chunk.type == "content_block_start":
+            elif chunk.type == "content_block_start":
                 if chunk.content_block.type == "tool_use":
                     self._in_tool_block = True
-                    return StreamChunk(
+                    yield StreamChunk(
                         type="tool_start", tool_name=chunk.content_block.name
                     )
 
-            if chunk.type == "input_json" and chunk.partial_json:
-                return StreamChunk(type="tool_input", partial_json=chunk.partial_json)
+            elif chunk.type == "input_json" and chunk.partial_json:
+                yield StreamChunk(type="tool_input", partial_json=chunk.partial_json)
 
-            if chunk.type == "content_block_stop" and self._in_tool_block:
+            elif chunk.type == "content_block_stop" and self._in_tool_block:
                 self._in_tool_block = False
-                return StreamChunk(type="tool_stop")
+                yield StreamChunk(type="tool_stop")
 
-    def get_final_message(self) -> ChatResponse:
-        message = self._message_stream.get_final_message()
-        self._response = message
+    async def get_final_message(self) -> ChatResponse:
+        message = await self._message_stream.get_final_message()
 
         stop_reason = message.stop_reason or "end_turn"
         tool_calls = [
@@ -79,11 +76,19 @@ class ClaudeStream:
         )
 
 
-class Claude(ChatClient[Anthropic]):
+class Claude(ChatClient[AsyncAnthropic]):
     def __init__(
-        self, client: Anthropic, model: str, token_tracker: TokenTracker | None = None
+        self,
+        *,
+        client: AsyncAnthropic | None = None,
+        model: str,
+        token_tracker: TokenTracker | None = None,
+        sync_client: Anthropic | None = None,
     ) -> None:
-        super().__init__(client=client, model=model, token_tracker=token_tracker)
+        super().__init__(
+            client=client or AsyncAnthropic(), model=model, token_tracker=token_tracker
+        )
+        self._sync_client = sync_client or Anthropic()
 
     def build_document_block(self, content: str, title: str) -> dict[str, Any]:
         return {
@@ -213,7 +218,7 @@ class Claude(ChatClient[Anthropic]):
     def chat(self, messages: list[Any], **kwargs: Unpack[ChatParams]) -> ChatResponse:
         params = self._build_params(messages=messages, **kwargs)
 
-        response = self.client.messages.create(**params)
+        response = self._sync_client.messages.create(**params)
 
         self.record_usage(response.usage)
 
@@ -225,7 +230,7 @@ class Claude(ChatClient[Anthropic]):
             raw=response,
         )
 
-    def chat_stream(
+    async def chat_stream(
         self, messages: list[Any], **kwargs: Unpack[ChatParams]
     ) -> MessageStream:
         params = self._build_params(messages=messages, **kwargs)

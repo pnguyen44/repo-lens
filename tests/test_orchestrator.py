@@ -1,3 +1,4 @@
+from collections.abc import AsyncIterator
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
@@ -12,11 +13,16 @@ def _make_stream(
     response: ChatResponse, chunks: list[StreamChunk] | None = None
 ) -> MagicMock:
     chunk_list = chunks or []
+
+    async def _aiter() -> AsyncIterator[StreamChunk]:
+        for chunk in chunk_list:
+            yield chunk
+
     stream = MagicMock()
-    stream.__enter__.return_value = stream
-    stream.__exit__.return_value = None
-    stream.__iter__.side_effect = lambda: iter(chunk_list)
-    stream.get_final_message.return_value = response
+    stream.__aenter__ = AsyncMock(return_value=stream)
+    stream.__aexit__ = AsyncMock(return_value=None)
+    stream.__aiter__ = lambda self: _aiter()
+    stream.get_final_message = AsyncMock(return_value=response)
     return stream
 
 
@@ -45,8 +51,8 @@ async def test_run_calls_on_text_per_chunk() -> None:
     ]
 
     chat_client = MagicMock()
-    chat_client.chat_stream.return_value = _make_stream(
-        response=response, chunks=chunks
+    chat_client.chat_stream = AsyncMock(
+        return_value=_make_stream(response=response, chunks=chunks)
     )
 
     received: list[str] = []
@@ -75,8 +81,8 @@ async def test_run_returns_text_when_planner_does_not_delegate() -> None:
     ]
 
     chat_client = MagicMock()
-    chat_client.chat_stream.return_value = _make_stream(
-        response=response, chunks=chunks
+    chat_client.chat_stream = AsyncMock(
+        return_value=_make_stream(response=response, chunks=chunks)
     )
 
     mock_agent = _make_agent()
@@ -101,13 +107,15 @@ async def test_run_delegates_to_agent_and_returns_synthesized_response() -> None
     )
 
     chat_client = MagicMock()
-    chat_client.chat_stream.side_effect = [
-        _make_stream(tool_call_response),
-        _make_stream(
-            final_response,
-            [StreamChunk(type="text", text="here are the open PRs...")],
-        ),
-    ]
+    chat_client.chat_stream = AsyncMock(
+        side_effect=[
+            _make_stream(tool_call_response),
+            _make_stream(
+                final_response,
+                [StreamChunk(type="text", text="here are the open PRs...")],
+            ),
+        ]
+    )
 
     mock_agent = _make_agent(run_result="3 open PRs found")
     agents: dict[AgentName, Any] = {AgentName.GITHUB: mock_agent}
@@ -126,7 +134,7 @@ async def test_run_stops_at_max_delegations() -> None:
     )
 
     chat_client = MagicMock()
-    chat_client.chat_stream.return_value = _make_stream(tool_call_response)
+    chat_client.chat_stream = AsyncMock(return_value=_make_stream(tool_call_response))
 
     mock_agent = _make_agent(run_result="result")
     agents: dict[AgentName, Any] = {AgentName.GITHUB: mock_agent}
@@ -151,13 +159,15 @@ async def test_run_handles_unknown_agent_name() -> None:
     )
 
     chat_client = MagicMock()
-    chat_client.chat_stream.side_effect = [
-        _make_stream(tool_call_response),
-        _make_stream(
-            final_response,
-            [StreamChunk(type="text", text="I could not find that agent.")],
-        ),
-    ]
+    chat_client.chat_stream = AsyncMock(
+        side_effect=[
+            _make_stream(tool_call_response),
+            _make_stream(
+                final_response,
+                [StreamChunk(type="text", text="I could not find that agent.")],
+            ),
+        ]
+    )
 
     mock_agent = _make_agent()
     agents: dict[AgentName, Any] = {AgentName.GITHUB: mock_agent}
@@ -176,7 +186,7 @@ async def test_run_retires_empty_specialist_then_fails_closed() -> None:
     )
 
     chat_client = MagicMock()
-    chat_client.chat_stream.return_value = _make_stream(tool_call_response)
+    chat_client.chat_stream = AsyncMock(return_value=_make_stream(tool_call_response))
 
     mock_agent = _make_agent(run_result="")
     mock_agent.run = AsyncMock(return_value="")

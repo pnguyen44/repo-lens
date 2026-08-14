@@ -10,13 +10,12 @@ def create_chat_client(
 
     if config.provider == "gemini":
         from google import genai
+
         from repo_lens.providers.gemini import Gemini
 
         client = genai.Client()
         return Gemini(client=client, model=model, token_tracker=token_tracker)
     else:
-        from anthropic import Anthropic
         from repo_lens.providers.claude import Claude
 
-        client = Anthropic()
-        return Claude(client=client, model=model, token_tracker=token_tracker)
+        return Claude(model=model, token_tracker=token_tracker)

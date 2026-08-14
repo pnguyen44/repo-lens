@@ -119,7 +119,7 @@ class Chat:
         augmented_query = await self._build_context(query) or query
         self.chat_client.add_user_message(self.messages, augmented_query)
 
-    def _stream_and_log(
+    async def _stream_and_log(
         self,
         tool_choice: dict[str, Any] | None = None,
         on_tool_start: OnToolStartCallback | None = None,
@@ -132,14 +132,15 @@ class Chat:
         text = ""
         had_output = False
         try:
-            with self.chat_client.chat_stream(
+            stream = await self.chat_client.chat_stream(
                 messages=self.messages,
                 tools=self.tools,
                 system=system,
                 web_search=self.web_search,
                 tool_choice=tool_choice,
-            ) as stream:
-                for chunk in stream:
+            )
+            async with stream:
+                async for chunk in stream:
                     if chunk.type == "text":
                         text += chunk.text
                         had_output = True
@@ -150,7 +151,7 @@ class Chat:
                         if on_tool_input:
                             on_tool_input(chunk.partial_json)
 
-                response = stream.get_final_message()
+                response = await stream.get_final_message()
 
                 call_ms = (time.perf_counter() - call_start) * 1000
                 if response.usage:
@@ -244,7 +245,7 @@ class Chat:
         tool_rounds = 0
         while True:
             try:
-                response, text = self._stream_and_log(
+                response, text = await self._stream_and_log(
                     tool_choice=tool_choice,
                     on_tool_start=on_tool_start,
                     on_tool_input=on_tool_input,

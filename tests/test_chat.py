@@ -1,3 +1,4 @@
+from collections.abc import AsyncIterator
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -155,11 +156,16 @@ def _make_stream(
     response: ChatResponse, chunks: list[StreamChunk] | None = None
 ) -> MagicMock:
     chunk_list = chunks or []
+
+    async def _aiter() -> AsyncIterator[StreamChunk]:
+        for chunk in chunk_list:
+            yield chunk
+
     stream = MagicMock()
-    stream.__enter__.return_value = stream
-    stream.__exit__.return_value = None
-    stream.__iter__.side_effect = lambda: iter(chunk_list)
-    stream.get_final_message.return_value = response
+    stream.__aenter__ = AsyncMock(return_value=stream)
+    stream.__aexit__ = AsyncMock(return_value=None)
+    stream.__aiter__ = lambda self: _aiter()
+    stream.get_final_message = AsyncMock(return_value=response)
     return stream
 
 
@@ -173,7 +179,7 @@ async def test_run_stops_at_max_tool_iterations() -> None:
     )
 
     chat_client = MagicMock()
-    chat_client.chat_stream.return_value = _make_stream(tool_call_response)
+    chat_client.chat_stream = AsyncMock(return_value=_make_stream(tool_call_response))
 
     chat = Chat(
         chat_client=chat_client,
@@ -199,8 +205,10 @@ async def test_run_stops_at_max_tool_iterations() -> None:
 @pytest.mark.asyncio
 async def test_run_raises_gemini_429_after_retries_exhausted() -> None:
     chat_client = MagicMock()
-    chat_client.chat_stream.side_effect = GeminiClientError(
-        429, {"error": {"message": "Quota exceeded. Please retry in 0s."}}
+    chat_client.chat_stream = AsyncMock(
+        side_effect=GeminiClientError(
+            429, {"error": {"message": "Quota exceeded. Please retry in 0s."}}
+        )
     )
 
     chat = Chat(chat_client=chat_client, mcp_clients={})
@@ -219,8 +227,10 @@ async def test_run_raises_anthropic_rate_limit_after_retries_exhausted() -> None
     )
 
     chat_client = MagicMock()
-    chat_client.chat_stream.side_effect = AnthropicRateLimitError(
-        "rate limited", response=response, body=None
+    chat_client.chat_stream = AsyncMock(
+        side_effect=AnthropicRateLimitError(
+            "rate limited", response=response, body=None
+        )
     )
 
     chat = Chat(chat_client=chat_client, mcp_clients={})

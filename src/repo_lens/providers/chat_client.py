@@ -1,7 +1,8 @@
 import re
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from typing import Any, Generic, Iterator, Protocol, Self, TypedDict, TypeVar, Unpack
+from typing import Any, Generic, Protocol, Self, TypedDict, TypeVar, Unpack
 
 from repo_lens.providers.token_tracker import TokenTracker
 
@@ -36,11 +37,10 @@ class StreamError(Exception):
 
 
 class MessageStream(Protocol):
-    def __enter__(self) -> Self: ...
-    def __exit__(self, *args: Any) -> None: ...
-    def __iter__(self) -> Iterator[StreamChunk]: ...
-    def __next__(self) -> StreamChunk: ...
-    def get_final_message(self) -> ChatResponse: ...
+    async def __aenter__(self) -> Self: ...
+    async def __aexit__(self, *args: Any) -> None: ...
+    def __aiter__(self) -> AsyncIterator[StreamChunk]: ...
+    async def get_final_message(self) -> ChatResponse: ...
 
 
 class ChatParams(TypedDict, total=False):
@@ -82,7 +82,7 @@ class ChatClientProtocol(Protocol):
         self, messages: list[Any], **kwargs: Unpack[ChatParams]
     ) -> ChatResponse: ...
 
-    def chat_stream(
+    async def chat_stream(
         self, messages: list[Any], **kwargs: Unpack[ChatParams]
     ) -> MessageStream: ...
 
@@ -136,7 +136,7 @@ class ChatClient(ABC, Generic[T]):
         pass
 
     @abstractmethod
-    def chat_stream(
+    async def chat_stream(
         self, messages: list[Any], **kwargs: Unpack[ChatParams]
     ) -> MessageStream:
         pass

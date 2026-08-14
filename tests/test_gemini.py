@@ -12,7 +12,13 @@ def _event(event_type: str, **kwargs: Any) -> SimpleNamespace:
     return SimpleNamespace(event_type=event_type, **kwargs)
 
 
-def test_gemini_stream_accumulates_arguments_delta() -> None:
+async def _async_events(events: list[SimpleNamespace]):
+    for event in events:
+        yield event
+
+
+@pytest.mark.asyncio
+async def test_gemini_stream_accumulates_arguments_delta() -> None:
     events = [
         _event(
             "step.start",
@@ -40,9 +46,10 @@ def test_gemini_stream_accumulates_arguments_delta() -> None:
         ),
     ]
 
-    stream = GeminiStream(iter(events))
-    list(stream)
-    response = stream.get_final_message()
+    stream = GeminiStream(_async_events(events))
+    async for _ in stream:
+        pass
+    response = await stream.get_final_message()
 
     assert response.stop_reason == "tool_use"
     assert len(response.tool_calls) == 1
@@ -52,7 +59,8 @@ def test_gemini_stream_accumulates_arguments_delta() -> None:
     }
 
 
-def test_gemini_stream_accumulates_legacy_arguments() -> None:
+@pytest.mark.asyncio
+async def test_gemini_stream_accumulates_legacy_arguments() -> None:
     events = [
         _event(
             "step.start",
@@ -80,9 +88,10 @@ def test_gemini_stream_accumulates_legacy_arguments() -> None:
         ),
     ]
 
-    stream = GeminiStream(iter(events))
-    list(stream)
-    response = stream.get_final_message()
+    stream = GeminiStream(_async_events(events))
+    async for _ in stream:
+        pass
+    response = await stream.get_final_message()
 
     assert response.tool_calls[0].input == {
         "agent_name": "github",
@@ -90,7 +99,8 @@ def test_gemini_stream_accumulates_legacy_arguments() -> None:
     }
 
 
-def test_gemini_stream_raises_client_error_on_rate_limit() -> None:
+@pytest.mark.asyncio
+async def test_gemini_stream_raises_client_error_on_rate_limit() -> None:
     events = [
         _event(
             "error",
@@ -100,18 +110,21 @@ def test_gemini_stream_raises_client_error_on_rate_limit() -> None:
         ),
     ]
 
-    stream = GeminiStream(iter(events))
+    stream = GeminiStream(_async_events(events))
     with pytest.raises(GeminiClientError) as exc_info:
-        list(stream)
+        async for _ in stream:
+            pass
 
     assert exc_info.value.code == 429
 
 
-def test_gemini_stream_raises_stream_error_on_non_rate_limit() -> None:
+@pytest.mark.asyncio
+async def test_gemini_stream_raises_stream_error_on_non_rate_limit() -> None:
     events = [
         _event("error", error=SimpleNamespace(message="Internal server error")),
     ]
 
-    stream = GeminiStream(iter(events))
+    stream = GeminiStream(_async_events(events))
     with pytest.raises(StreamError):
-        list(stream)
+        async for _ in stream:
+            pass

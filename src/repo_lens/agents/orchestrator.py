@@ -93,7 +93,7 @@ class Orchestrator:
             agents="\n".join(agent_lines)
         )
 
-    def _stream(
+    async def _stream(
         self,
         on_text: OnTextCallback | None = None,
         repo_context: RepoContext | None = None,
@@ -104,19 +104,20 @@ class Orchestrator:
         text = ""
         had_output = False
         try:
-            with self.chat_client.chat_stream(
+            stream = await self.chat_client.chat_stream(
                 messages=self.messages,
                 tools=self.tools,
                 system=system,
                 web_search=False,
-            ) as stream:
-                for chunk in stream:
+            )
+            async with stream:
+                async for chunk in stream:
                     if chunk.type == "text":
                         text += chunk.text
                         had_output = True
                         if on_text:
                             on_text(chunk.text)
-                response = stream.get_final_message()
+                response = await stream.get_final_message()
                 if response.usage:
                     self.chat_client.record_usage(response.usage)
             self.chat_client.add_assistant_message(
@@ -144,7 +145,7 @@ class Orchestrator:
 
         while True:
             try:
-                response, text = self._stream(
+                response, text = await self._stream(
                     on_text=on_text, repo_context=repo_context
                 )
             except AnthropicRateLimitError:

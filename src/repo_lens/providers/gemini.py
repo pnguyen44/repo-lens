@@ -1,6 +1,7 @@
 import json
 import logging
-from typing import Any, Iterator, Unpack
+from collections.abc import AsyncIterator
+from typing import Any, Unpack
 
 from google.genai import Client as GenaiClient
 from google.genai.errors import ClientError as GeminiClientError
@@ -55,23 +56,23 @@ class GeminiStream:
         self._text_parts: list[str] = []
         self._pending_calls: dict[int, dict[str, Any]] = {}
 
-    def __enter__(self) -> "GeminiStream":
+    async def __aenter__(self) -> "GeminiStream":
         return self
 
-    def __exit__(self, *args: Any) -> None:
-        pass
+    async def __aexit__(self, *args: Any) -> None:
+        close = getattr(self._stream, "close", None)
+        if close is not None:
+            await close()
 
-    def __iter__(self) -> Iterator[StreamChunk]:
-        return self
+    def __aiter__(self) -> AsyncIterator[StreamChunk]:
+        return self._iter_chunks()
 
-    def __next__(self) -> StreamChunk:
-        while True:
-            chunk = next(self._stream)
-
+    async def _iter_chunks(self) -> AsyncIterator[StreamChunk]:
+        async for chunk in self._stream:
             match chunk.event_type:
                 case "interaction.completed":
                     self._interaction = chunk.interaction
-                    raise StopIteration
+                    return
 
                 case "error":
                     error = getattr(chunk, "error", None)
@@ -97,13 +98,13 @@ class GeminiStream:
                         "arguments": initial_args,
                     }
 
-                    return StreamChunk(type="tool_start", tool_name=chunk.step.name)
+                    yield StreamChunk(type="tool_start", tool_name=chunk.step.name)
 
                 case "step.delta":
                     match chunk.delta.type:
                         case "text":
                             self._text_parts.append(chunk.delta.text)
-                            return StreamChunk(type="text", text=chunk.delta.text)
+                            yield StreamChunk(type="text", text=chunk.delta.text)
 
                         case "arguments" | "arguments_delta":
                             partial = (
@@ -113,15 +114,15 @@ class GeminiStream:
                             )
                             if chunk.index in self._pending_calls:
                                 self._pending_calls[chunk.index]["arguments"] += partial
-                            return StreamChunk(
+                            yield StreamChunk(
                                 type="tool_input",
                                 partial_json=partial,
                             )
 
                 case "step.stop":
-                    return StreamChunk(type="tool_stop")
+                    yield StreamChunk(type="tool_stop")
 
-    def get_final_message(self) -> ChatResponse:
+    async def get_final_message(self) -> ChatResponse:
         text = "".join(self._text_parts)
 
         steps: list[dict[str, Any]] = []
@@ -250,13 +251,13 @@ class Gemini(ChatClient[GenaiClient]):
             raw=response,
         )
 
-    def chat_stream(
+    async def chat_stream(
         self, messages: list[Any], **kwargs: Unpack[ChatParams]
     ) -> MessageStream:
         params = self._build_params(messages, **kwargs)
         params["stream"] = True
 
-        stream = self.client.interactions.create(**params)
+        stream = await self.client.aio.interactions.create(**params)
 
         return GeminiStream(stream)
 

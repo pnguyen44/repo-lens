@@ -19,7 +19,7 @@ def test_claude_chat_calls_api() -> None:
     text_block = MagicMock(type="text", text="mocked response", citations=None)
     mock_client.messages.create.return_value.content = [text_block]
 
-    chat_client = Claude(client=mock_client, model=model)
+    chat_client = Claude(client=MagicMock(), sync_client=mock_client, model=model)
     messages: list[Any] = [{"role": "user", "content": "hello"}]
     result = chat_client.chat(messages=messages)
 
@@ -30,7 +30,7 @@ def test_chat_excludes_system_when_none() -> None:
     mock_client = MagicMock()
     mock_client.messages.create.return_value.content = [MagicMock(text="response")]
 
-    chat_client = Claude(client=mock_client, model=model)
+    chat_client = Claude(client=MagicMock(), sync_client=mock_client, model=model)
     messages: list[Any] = [{"role": "user", "content": "hello"}]
     chat_client.chat(messages=messages)
 
@@ -42,7 +42,7 @@ def test_chat_includes_system_when_provided() -> None:
     mock_client = MagicMock()
     mock_client.messages.create.return_value.content = [MagicMock(text="response")]
 
-    chat_client = Claude(client=mock_client, model=model)
+    chat_client = Claude(client=MagicMock(), sync_client=mock_client, model=model)
     messages: list[Any] = [{"role": "user", "content": "hello"}]
     chat_client.chat(messages=messages, system="You are helpful")
 
@@ -51,7 +51,7 @@ def test_chat_includes_system_when_provided() -> None:
 
 
 def test_build_params_web_search_enabled() -> None:
-    chat_client = Claude(client=MagicMock(), model=model)
+    chat_client = Claude(client=MagicMock(), sync_client=MagicMock(), model=model)
     messages: list[Any] = [{"role": "user", "content": "hello"}]
     params = chat_client._build_params(messages, web_search=True)
 
@@ -60,7 +60,7 @@ def test_build_params_web_search_enabled() -> None:
 
 
 def test_build_params_no_web_search_by_default() -> None:
-    chat_client = Claude(client=MagicMock(), model=model)
+    chat_client = Claude(client=MagicMock(), sync_client=MagicMock(), model=model)
     messages: list[Any] = [{"role": "user", "content": "hello"}]
     params = chat_client._build_params(messages)
 
@@ -68,7 +68,7 @@ def test_build_params_no_web_search_by_default() -> None:
 
 
 def test_build_params_thinking() -> None:
-    chat_client = Claude(client=MagicMock(), model=model)
+    chat_client = Claude(client=MagicMock(), sync_client=MagicMock(), model=model)
     messages: list[Any] = [{"role": "user", "content": "hello"}]
     params = chat_client._build_params(
         messages, thinking=True, thinking_budget=2048, temperature=0.5
@@ -79,7 +79,7 @@ def test_build_params_thinking() -> None:
 
 
 def test_build_params_caches_last_tool() -> None:
-    chat_client = Claude(client=MagicMock(), model=model)
+    chat_client = Claude(client=MagicMock(), sync_client=MagicMock(), model=model)
     messages: list[Any] = [{"role": "user", "content": "hello"}]
     tools = [{"name": "tool_a"}, {"name": "tool_b"}]
 

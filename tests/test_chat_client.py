@@ -1,3 +1,4 @@
+from collections.abc import AsyncIterator
 from typing import Any, Unpack
 
 from repo_lens.providers.chat_client import (
@@ -5,33 +6,35 @@ from repo_lens.providers.chat_client import (
     ChatParams,
     ChatResponse,
     MessageStream,
+    StreamChunk,
 )
 
 model = "test-model"
 
 
 class FakeStream:
-    def __enter__(self):
+    async def __aenter__(self) -> "FakeStream":
         return self
 
-    def __exit__(self, *args):
+    async def __aexit__(self, *args: Any) -> None:
         pass
 
-    def __iter__(self):
-        return iter([])
+    def __aiter__(self) -> AsyncIterator[StreamChunk]:
+        return self._iter_chunks()
 
-    def __next__(self):
-        raise StopIteration
+    async def _iter_chunks(self) -> AsyncIterator[StreamChunk]:
+        if False:
+            yield StreamChunk(type="text")
 
-    def get_final_message(self):
-        return "fake message"
+    async def get_final_message(self) -> ChatResponse:
+        return ChatResponse(text="fake message")
 
 
 class FakeChatClient(ChatClient[None]):
     def chat(self, messages: list[Any], **kwargs: Unpack[ChatParams]) -> ChatResponse:
         return ChatResponse(text="fake response")
 
-    def chat_stream(
+    async def chat_stream(
         self, messages: list[Any], **kwargs: Unpack[ChatParams]
     ) -> MessageStream:
         return FakeStream()
