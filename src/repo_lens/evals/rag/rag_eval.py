@@ -9,8 +9,8 @@ from voyageai.client_async import AsyncClient as VoyageAsyncClient
 
 from repo_lens.agents.chat import MAX_RETRIES
 from repo_lens.core.config import create_config
-from repo_lens.evals.models import FaithfulnessVerdict
-from repo_lens.evals.rag_eval_dataset import EVAL_CASES
+from repo_lens.evals.rag.models import FaithfulnessVerdict
+from repo_lens.evals.rag.rag_eval_dataset import EVAL_CASES
 from repo_lens.evals.structured_output import parse_with_retry
 from repo_lens.providers.chat_client import ChatClientProtocol
 from repo_lens.providers.provider import create_chat_client
@@ -21,7 +21,7 @@ from repo_lens.rag.vector_index import VectorIndex
 logger = logging.getLogger(__name__)
 
 FIXTURE_PATH = (
-    Path(__file__).resolve().parents[3] / "tests/fixtures/hyperfleet_api_readme.md"
+    Path(__file__).resolve().parents[4] / "tests/fixtures/hyperfleet_api_readme.md"
 )
 
 

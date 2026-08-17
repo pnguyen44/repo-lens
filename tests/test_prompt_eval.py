@@ -1,8 +1,8 @@
 import json
 from unittest.mock import MagicMock
 
+from repo_lens.evals.prompt.prompt_eval import PromptEvaluator
 from repo_lens.providers.chat_client import ChatResponse
-from repo_lens.evals.prompt_eval import PromptEvaluator
 
 
 def test_generate_dataset_returns_empty_after_retries() -> None:

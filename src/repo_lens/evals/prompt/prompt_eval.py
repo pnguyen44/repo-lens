@@ -6,7 +6,7 @@ from typing import Any
 from pydantic import TypeAdapter, ValidationError
 
 from repo_lens.core.config import create_config
-from repo_lens.evals.models import GradeResult, TestCase
+from repo_lens.evals.prompt.models import GradeResult, TestCase
 from repo_lens.evals.structured_output import parse_with_retry
 from repo_lens.providers.chat_client import ChatClientProtocol
 from repo_lens.providers.provider import create_chat_client

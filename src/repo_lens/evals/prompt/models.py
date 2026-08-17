@@ -1,11 +1,4 @@
-from typing import Literal
-
 from pydantic import BaseModel, Field
-
-
-class FaithfulnessVerdict(BaseModel):
-    verdict: Literal["grounded", "partial", "hallucinated"]
-    reasoning: str
 
 
 class GradeResult(BaseModel):
