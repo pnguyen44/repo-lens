@@ -28,8 +28,8 @@ class TestAddDocuments:
 
         await retriever.add_documents(docs)
 
-        index1.add_documents.assert_called_once_with(docs)
-        index2.add_documents.assert_called_once_with(docs)
+        index1.add_documents.assert_awaited_once_with(docs)
+        index2.add_documents.assert_awaited_once_with(docs)
 
     async def test_add_document_delegates_to_all_indexes(self) -> None:
         index1 = AsyncMock()
@@ -39,8 +39,8 @@ class TestAddDocuments:
 
         await retriever.add_document(doc)
 
-        index1.add_document.assert_called_once_with(doc)
-        index2.add_document.assert_called_once_with(doc)
+        index1.add_document.assert_awaited_once_with(doc)
+        index2.add_document.assert_awaited_once_with(doc)
 
 
 class TestSearch:

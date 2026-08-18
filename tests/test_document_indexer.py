@@ -1,3 +1,4 @@
+import asyncio
 from unittest.mock import AsyncMock
 
 import pytest
@@ -24,7 +25,7 @@ async def test_sync_bm25_from_store_with_docs(indexer_parts):
     count = await indexer.sync_bm25_from_store()
 
     assert count == 2
-    retriever.reload_bm25.assert_called_once_with(docs)
+    retriever.reload_bm25.assert_awaited_once_with(docs)
 
 
 async def test_sync_bm25_from_store_empty(indexer_parts):
@@ -34,7 +35,7 @@ async def test_sync_bm25_from_store_empty(indexer_parts):
     count = await indexer.sync_bm25_from_store()
 
     assert count == 0
-    retriever.reload_bm25.assert_not_called()
+    retriever.reload_bm25.assert_not_awaited()
 
 
 async def test_file_is_indexed_true(indexer_parts):
@@ -42,7 +43,7 @@ async def test_file_is_indexed_true(indexer_parts):
     vector_index.exists_in_collection.return_value = True
 
     assert await indexer.file_is_indexed(repo="org/repo", path="docs/foo.md") is True
-    vector_index.exists_in_collection.assert_called_once_with(
+    vector_index.exists_in_collection.assert_awaited_once_with(
         "file_key", "org/repo:docs/foo.md"
     )
 
@@ -64,7 +65,7 @@ async def test_index_file_indexes_new_file(indexer_parts):
     )
 
     assert count == 1
-    retriever.add_documents.assert_called_once_with(
+    retriever.add_documents.assert_awaited_once_with(
         [
             {
                 "content": "chunk one",
@@ -86,7 +87,49 @@ async def test_index_file_skips_when_already_indexed(indexer_parts):
     )
 
     assert count == 0
-    retriever.add_documents.assert_not_called()
+    retriever.add_documents.assert_not_awaited()
+
+
+async def test_index_file_concurrent_calls_index_once(indexer_parts):
+    indexer, vector_index, retriever = indexer_parts
+    docs = [{"content": "chunk one", "repo": "org/repo", "path": "docs/foo.md"}]
+
+    indexed = False
+
+    async def fake_exists_in_collection(_field, _value):
+        await asyncio.sleep(0)
+        return indexed
+
+    async def fake_add_documents(_stamped):
+        nonlocal indexed
+        await asyncio.sleep(0)
+        indexed = True
+
+    vector_index.exists_in_collection.side_effect = fake_exists_in_collection
+    retriever.add_documents.side_effect = fake_add_documents
+
+    results = await asyncio.gather(
+        indexer.index_file(repo="org/repo", path="docs/foo.md", documents=docs),
+        indexer.index_file(repo="org/repo", path="docs/foo.md", documents=docs),
+    )
+
+    assert sorted(results) == [0, 1]
+    retriever.add_documents.assert_awaited_once()
+
+
+async def test_index_file_different_files_index_independently(indexer_parts):
+    indexer, vector_index, retriever = indexer_parts
+    vector_index.exists_in_collection.return_value = False
+    docs_a = [{"content": "chunk a", "repo": "org/repo", "path": "docs/a.md"}]
+    docs_b = [{"content": "chunk b", "repo": "org/repo", "path": "docs/b.md"}]
+
+    results = await asyncio.gather(
+        indexer.index_file(repo="org/repo", path="docs/a.md", documents=docs_a),
+        indexer.index_file(repo="org/repo", path="docs/b.md", documents=docs_b),
+    )
+
+    assert tuple(results) == (1, 1)
+    assert retriever.add_documents.await_count == 2
 
 
 async def test_clear_repo(indexer_parts):
@@ -98,6 +141,6 @@ async def test_clear_repo(indexer_parts):
     removed = await indexer.clear_repo("org/repo-a")
 
     assert removed == 65
-    vector_index.remove_from_collection.assert_called_once_with("repo", "org/repo-a")
-    retriever.reload_bm25.assert_called_once_with(remaining_docs)
-    retriever.add_documents.assert_not_called()
+    vector_index.remove_from_collection.assert_awaited_once_with("repo", "org/repo-a")
+    retriever.reload_bm25.assert_awaited_once_with(remaining_docs)
+    retriever.add_documents.assert_not_awaited()

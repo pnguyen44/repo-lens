@@ -2,6 +2,7 @@ import asyncio
 import logging
 import math
 import re
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,23 @@ def format_rate_limit_message(detail: str) -> str:
     )
 
 
+def _compute_backoff_seconds(retries: int, detail: str | None) -> int:
+    wait = parse_retry_after_seconds(detail) if detail else None
+    if wait is None:
+        wait = 2**retries
+    return wait
+
+
+def _prepare_retry(retries: int, max_retries: int, detail: str | None) -> int | None:
+    if retries >= max_retries:
+        logger.error("Rate limited after %d retries. Skipping.", retries)
+        return None
+
+    wait = _compute_backoff_seconds(retries=retries, detail=detail)
+    logger.warning("Rate limited. Retrying in %ds...", wait)
+    return wait
+
+
 async def wait_for_retry(
     *,
     retries: int,
@@ -40,14 +58,22 @@ async def wait_for_retry(
 
     Returns True if retries are exhausted and the caller should give up.
     """
-    if retries >= max_retries:
-        logger.error("Rate limited after %d retries. Skipping.", retries)
-        return True
-
-    wait = parse_retry_after_seconds(detail) if detail else None
+    wait = _prepare_retry(retries=retries, max_retries=max_retries, detail=detail)
     if wait is None:
-        wait = 2**retries
-
-    logger.warning("Rate limited. Retrying in %ds...", wait)
+        return True
     await asyncio.sleep(wait)
+    return False
+
+
+def wait_for_retry_sync(
+    *,
+    retries: int,
+    max_retries: int = 3,
+    detail: str | None = None,
+) -> bool:
+    """Sync counterpart to wait_for_retry, for non-async callers like PromptEvaluator."""
+    wait = _prepare_retry(retries=retries, max_retries=max_retries, detail=detail)
+    if wait is None:
+        return True
+    time.sleep(wait)
     return False

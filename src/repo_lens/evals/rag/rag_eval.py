@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import sys
 import textwrap
 from pathlib import Path
 from typing import Any
@@ -234,7 +235,7 @@ async def main() -> None:
             index=index,
             embedder=embedder,
             fixture_path=FIXTURE_PATH,
-            eval_cases=EVAL_CASES[:3],
+            eval_cases=EVAL_CASES,
             chat_client=chat_client,
         )
         await rag_evaluator.load_and_index()
@@ -245,6 +246,7 @@ async def main() -> None:
         rag_evaluator.print_results(results)
     except Exception as e:
         print(f"Error: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

@@ -23,7 +23,7 @@ async def test_rerank_passes_correct_args() -> None:
 
     await reranker.rerank(query="test query", documents=DOCS, top_k=2)
 
-    mock_client.rerank.assert_called_once_with(
+    mock_client.rerank.assert_awaited_once_with(
         query="test query", documents=DOCS, model=MODEL, top_k=2
     )
 

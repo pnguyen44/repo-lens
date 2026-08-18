@@ -3,12 +3,17 @@ import logging
 import sys
 from typing import Any
 
+from anthropic import RateLimitError as AnthropicRateLimitError
+from google.genai.errors import ClientError as GeminiClientError
 from pydantic import TypeAdapter, ValidationError
 
 from repo_lens.core.config import create_config
+from repo_lens.core.retry import wait_for_retry_sync
 from repo_lens.evals.prompt.models import GradeResult, TestCase
+from repo_lens.evals.prompt.prompt_eval_dataset import PROMPT_EVAL_CASES
+from repo_lens.evals.prompt.prompts import PROMPTS
 from repo_lens.evals.structured_output import parse_with_retry
-from repo_lens.providers.chat_client import ChatClientProtocol
+from repo_lens.providers.chat_client import ChatClientProtocol, ChatResponse
 from repo_lens.providers.provider import create_chat_client
 
 logger = logging.getLogger(__name__)
@@ -19,6 +24,26 @@ adapter = TypeAdapter(list[TestCase])
 class PromptEvaluator:
     def __init__(self, client: ChatClientProtocol) -> None:
         self.client = client
+
+    def _call_with_retry(self, messages: list[Any], *, json_mode: bool) -> ChatResponse:
+        retries = 0
+        while True:
+            try:
+                if json_mode:
+                    return self.client.chat_json(messages)
+                return self.client.chat(messages=messages)
+            except AnthropicRateLimitError:
+                if wait_for_retry_sync(retries=retries):
+                    raise
+                retries += 1
+            except GeminiClientError as e:
+                if e.code != 429:
+                    raise
+                if wait_for_retry_sync(
+                    retries=retries, detail=getattr(e, "message", str(e))
+                ):
+                    raise
+                retries += 1
 
     def generate_dataset(
         self, prompt: str, total_tests: int = 3, max_tries: int = 2
@@ -41,7 +66,7 @@ class PromptEvaluator:
         """
         messages: list[Any] = []
         self.client.add_user_message(messages=messages, content=dataset_prompt)
-        response = self.client.chat_json(messages)
+        response = self._call_with_retry(messages, json_mode=True)
         text = response.text
 
         try:
@@ -65,7 +90,7 @@ class PromptEvaluator:
         """
         messages: list[Any] = []
         self.client.add_user_message(messages=messages, content=message)
-        response = self.client.chat(messages=messages)
+        response = self._call_with_retry(messages, json_mode=False)
         return response.text
 
     def grade_output(self, test_case: dict[str, Any], output: str) -> dict[str, Any]:
@@ -80,7 +105,7 @@ class PromptEvaluator:
         """
         messages: list[Any] = []
         self.client.add_user_message(messages=messages, content=eval_prompt)
-        response = self.client.chat_json(messages)
+        response = self._call_with_retry(messages, json_mode=True)
 
         try:
             return parse_with_retry(
@@ -119,14 +144,20 @@ class PromptEvaluator:
 
 
 def main() -> None:
-    if len(sys.argv) < 2:
-        print('Usage: uv run src/prompt_eval.py "Your prompt here"')
-        sys.exit(1)
-
     config = create_config()
     client = create_chat_client(config)
 
     evaluator = PromptEvaluator(client)
+
+    if len(sys.argv) < 2:
+        # No prompt given: evaluate repo-lens's own prompts against their
+        # curated test cases instead of generating a dataset on the fly.
+        for name, prompt in PROMPTS.items():
+            print(f"\n=== {name} ===")
+            evaluator.run_eval(
+                prompt=prompt, test_cases=PROMPT_EVAL_CASES.get(name, [])
+            )
+        return
 
     prompt = sys.argv[1]
     test_cases = evaluator.generate_dataset(prompt)

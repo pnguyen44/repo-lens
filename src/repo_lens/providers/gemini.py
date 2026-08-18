@@ -120,7 +120,8 @@ class GeminiStream:
                             )
 
                 case "step.stop":
-                    yield StreamChunk(type="tool_stop")
+                    if chunk.index in self._pending_calls:
+                        yield StreamChunk(type="tool_stop")
 
     async def get_final_message(self) -> ChatResponse:
         text = "".join(self._text_parts)

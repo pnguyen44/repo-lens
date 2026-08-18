@@ -1,4 +1,6 @@
+import asyncio
 import logging
+from collections import defaultdict
 
 from repo_lens.rag.chroma_index import ChromaVectorIndex
 from repo_lens.rag.hybrid_retriever import HybridRetriever
@@ -13,6 +15,10 @@ class DocumentIndexer:
     ) -> None:
         self._vector_index = vector_index
         self._retriever = retriever
+        # Per-file-key locks so concurrent index_file calls for the same file
+        # serialize (avoiding duplicate BM25 entries), while different files
+        # still index in parallel.
+        self._file_locks: defaultdict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
 
     async def sync_bm25_from_store(self) -> int:
         documents = await self._vector_index.get_all_documents()
@@ -40,16 +46,18 @@ class DocumentIndexer:
     async def index_file(
         self, repo: str, path: str, documents: list[IndexedDocument]
     ) -> int:
-        if await self.file_is_indexed(repo=repo, path=path):
-            logger.debug("index_file: %s already indexed, skipping", path)
-            return 0
+        file_key = self._file_key(repo=repo, path=path)
+        async with self._file_locks[file_key]:
+            if await self.file_is_indexed(repo=repo, path=path):
+                logger.debug("index_file: %s already indexed, skipping", path)
+                return 0
 
-        stamped: list[IndexedDocument] = [
-            self._stamp_file_key(doc) for doc in documents
-        ]
-        await self._retriever.add_documents(stamped)
-        logger.info("Indexed %s (%d chunks)", path, len(stamped))
-        return len(stamped)
+            stamped: list[IndexedDocument] = [
+                self._stamp_file_key(doc) for doc in documents
+            ]
+            await self._retriever.add_documents(stamped)
+            logger.info("Indexed %s (%d chunks)", path, len(stamped))
+            return len(stamped)
 
     async def _sync_retriever(self) -> None:
         await self._retriever.reload_bm25(await self._vector_index.get_all_documents())

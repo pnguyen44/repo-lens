@@ -43,7 +43,7 @@ lint:
 	pre-commit run --all-files
 
 prompt-eval:
-	uv run python -m repo_lens.evals.prompt.prompt_eval "$(PROMPT)"
+	uv run python -m repo_lens.evals.prompt.prompt_eval $(if $(PROMPT),"$(PROMPT)")
 
 rag-eval:
 	uv run python -m repo_lens.evals.rag.rag_eval
