@@ -15,15 +15,32 @@ from repo_lens.rag.reranker import Reranker
 
 
 class AgentName(Enum):
-    GITHUB = "github"
-    RAG = "rag"
+    GITHUB = (
+        "github",
+        "Answers questions about GitHub repositories (PRs, issues, files, commits).",
+    )
+    RAG = (
+        "rag",
+        "Answers questions about indexed codebases using retrieved context.",
+    )
+
+    description: str
+
+    def __new__(cls, value: str, description: str = "") -> "AgentName":
+        obj = object.__new__(cls)
+        obj._value_ = value
+        obj.description = description
+        return obj
+
+
+WIRED_AGENTS: tuple[AgentName, ...] = (AgentName.GITHUB, AgentName.RAG)
 
 
 class Agent:
-    def __init__(self, *, name: AgentName, chat: Chat, description: str) -> None:
+    def __init__(self, *, name: AgentName, chat: Chat) -> None:
         self.name = name
         self.chat = chat
-        self.description = description
+        self.description = name.description
 
     async def run(
         self,
@@ -57,11 +74,7 @@ def create_github_agent(
         max_tool_iterations=max_tool_iterations,
     )
 
-    return Agent(
-        name=AgentName.GITHUB,
-        chat=chat,
-        description="Answers questions about GitHub repositories (PRs, issues, files, commits).",
-    )
+    return Agent(name=AgentName.GITHUB, chat=chat)
 
 
 def create_rag_agent(
@@ -84,8 +97,4 @@ def create_rag_agent(
         max_tool_iterations=max_tool_iterations,
     )
 
-    return Agent(
-        name=AgentName.RAG,
-        chat=chat,
-        description="Answers questions about indexed codebases using retrieved context.",
-    )
+    return Agent(name=AgentName.RAG, chat=chat)

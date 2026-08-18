@@ -76,7 +76,7 @@ async def test_agent_run_clears_messages_and_delegates() -> None:
     mock_chat.run = AsyncMock(return_value="answer")
     mock_chat.messages = [{"role": "user", "content": "old message"}]
 
-    agent = Agent(name=AgentName.GITHUB, chat=mock_chat, description="test agent")
+    agent = Agent(name=AgentName.GITHUB, chat=mock_chat)
     result = await agent.run("some task")
 
     assert mock_chat.messages == []
@@ -97,7 +97,7 @@ async def test_agent_run_forwards_repo_context() -> None:
     mock_chat.messages = []
     repo_context = RepoContext(owner="org", repo="my-repo")
 
-    agent = Agent(name=AgentName.GITHUB, chat=mock_chat, description="test agent")
+    agent = Agent(name=AgentName.GITHUB, chat=mock_chat)
     await agent.run("some task", repo_context=repo_context)
 
     mock_chat.run.assert_called_once_with(

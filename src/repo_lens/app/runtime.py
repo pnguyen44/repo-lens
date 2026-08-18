@@ -3,7 +3,13 @@ from typing import Awaitable, Callable
 
 from voyageai.client_async import AsyncClient as VoyageAsyncClient
 
-from repo_lens.agents.agent import AgentName, create_github_agent, create_rag_agent
+from repo_lens.agents.agent import (
+    WIRED_AGENTS,
+    Agent,
+    AgentName,
+    create_github_agent,
+    create_rag_agent,
+)
 from repo_lens.agents.orchestrator import Orchestrator
 from repo_lens.core.config import Config, VectorStore
 from repo_lens.core.mcp_client import MCPClient
@@ -100,11 +106,20 @@ class App:
             max_tool_iterations=self.config.max_tool_iterations,
         )
 
+        agents: dict[AgentName, Agent] = {
+            AgentName.GITHUB: github_agent,
+            AgentName.RAG: rag_agent,
+        }
+        if set(agents) != set(WIRED_AGENTS):
+            raise RuntimeError(
+                f"Agent wiring mismatch: agents={set(agents)} WIRED_AGENTS={set(WIRED_AGENTS)}"
+            )
+
         orchestrator_chat_client = create_chat_client(
             config=self.config, token_tracker=self.token_tracker
         )
         return Orchestrator(
-            agents={AgentName.GITHUB: github_agent, AgentName.RAG: rag_agent},
+            agents=agents,
             chat_client=orchestrator_chat_client,
         )
 

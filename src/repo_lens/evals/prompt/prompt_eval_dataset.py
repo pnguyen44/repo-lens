@@ -1,8 +1,7 @@
 """Test cases for repo-lens's own prompts, keyed by prompt name.
 
-The evaluator runs prompts without tools wired (see PromptEvaluator.run_prompt),
-so criteria are text-based: they grade whether the model's response signals the
-right *intent* (e.g. delegating), not whether a tool was actually invoked.
+Criteria are text-based: they grade whether the model's response signals the
+right delegation intent. Tool-call responses are converted to text before grading.
 """
 
 PROMPT_EVAL_CASES: dict[str, list[dict[str, object]]] = {

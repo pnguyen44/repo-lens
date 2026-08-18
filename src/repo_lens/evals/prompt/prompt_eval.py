@@ -7,13 +7,14 @@ from anthropic import RateLimitError as AnthropicRateLimitError
 from google.genai.errors import ClientError as GeminiClientError
 from pydantic import TypeAdapter, ValidationError
 
+from repo_lens.agents.agent import WIRED_AGENTS
 from repo_lens.core.config import create_config
 from repo_lens.core.retry import wait_for_retry_sync
 from repo_lens.evals.prompt.models import GradeResult, TestCase
 from repo_lens.evals.prompt.prompt_eval_dataset import PROMPT_EVAL_CASES
-from repo_lens.evals.prompt.prompts import PROMPTS
+from repo_lens.evals.prompt.prompts import EVAL_TOOLS, PROMPTS
 from repo_lens.evals.structured_output import parse_with_retry
-from repo_lens.providers.chat_client import ChatClientProtocol, ChatResponse
+from repo_lens.providers.chat_client import ChatClientProtocol, ChatResponse, ToolCall
 from repo_lens.providers.provider import create_chat_client
 
 logger = logging.getLogger(__name__)
@@ -21,9 +22,45 @@ logger = logging.getLogger(__name__)
 adapter = TypeAdapter(list[TestCase])
 
 
+def _warn_missing_agent_test_coverage(prompt_name: str) -> None:
+    """Log when a wired agent has no test case criteria mentioning it."""
+    cases = PROMPT_EVAL_CASES.get(prompt_name, [])
+    for name in WIRED_AGENTS:
+        needle = f"{name.value} agent"
+        covered = any(
+            needle in str(criterion).lower()
+            for case in cases
+            for criteria in [case.get("criteria", [])]
+            if isinstance(criteria, list)
+            for criterion in criteria
+        )
+        if not covered:
+            logger.warning(
+                "No %s test cases mention the %s agent in criteria",
+                prompt_name,
+                name.value,
+            )
+
+
+def _describe_tool_call(tool_call: ToolCall | Any) -> str:
+    tool_input = getattr(tool_call, "input", None)
+    if not isinstance(tool_input, dict):
+        return str(tool_call)
+
+    agent_name = tool_input.get("agent_name", "?")
+    task = tool_input.get("task", "")
+    return f"I will delegate this task to the {agent_name} agent: {task}"
+
+
 class PromptEvaluator:
-    def __init__(self, client: ChatClientProtocol) -> None:
+    def __init__(
+        self,
+        *,
+        client: ChatClientProtocol,
+        tools: list[dict[str, Any]] | None = None,
+    ) -> None:
         self.client = client
+        self.tools = tools
 
     def _call_with_retry(self, messages: list[Any], *, json_mode: bool) -> ChatResponse:
         retries = 0
@@ -31,7 +68,7 @@ class PromptEvaluator:
             try:
                 if json_mode:
                     return self.client.chat_json(messages)
-                return self.client.chat(messages=messages)
+                return self.client.chat(messages=messages, tools=self.tools)
             except AnthropicRateLimitError:
                 if wait_for_retry_sync(retries=retries):
                     raise
@@ -79,7 +116,7 @@ class PromptEvaluator:
             logger.error("Failed to generate valid dataset after retries.")
             return []
 
-    def run_prompt(self, prompt: str, test_case: dict[str, Any]) -> str:
+    def run_prompt(self, *, prompt: str, test_case: dict[str, Any]) -> str:
         prompt = prompt.strip()
         separator = "" if prompt and prompt[-1] in ".?!:" else ":"
         message = f"""
@@ -91,6 +128,10 @@ class PromptEvaluator:
         messages: list[Any] = []
         self.client.add_user_message(messages=messages, content=message)
         response = self._call_with_retry(messages, json_mode=False)
+        if response.stop_reason == "tool_use" and response.tool_calls:
+            return "\n".join(
+                _describe_tool_call(tool_call) for tool_call in response.tool_calls
+            )
         return response.text
 
     def grade_output(self, test_case: dict[str, Any], output: str) -> dict[str, Any]:
@@ -122,8 +163,10 @@ class PromptEvaluator:
                 "score": 0,
             }
 
-    def run_test_case(self, prompt: str, test_case: dict[str, Any]) -> dict[str, Any]:
-        output = self.run_prompt(prompt, test_case)
+    def run_test_case(
+        self, *, prompt: str, test_case: dict[str, Any]
+    ) -> dict[str, Any]:
+        output = self.run_prompt(prompt=prompt, test_case=test_case)
         grade = self.grade_output(test_case, output)
         print(json.dumps(grade, indent=2))
         return grade
@@ -134,7 +177,7 @@ class PromptEvaluator:
 
         total = 0
         for test_case in test_cases:
-            grade = self.run_test_case(prompt, test_case)
+            grade = self.run_test_case(prompt=prompt, test_case=test_case)
             score = int(grade["score"])
             total += score
 
@@ -147,18 +190,17 @@ def main() -> None:
     config = create_config()
     client = create_chat_client(config)
 
-    evaluator = PromptEvaluator(client)
-
     if len(sys.argv) < 2:
         # No prompt given: evaluate repo-lens's own prompts against their
         # curated test cases instead of generating a dataset on the fly.
         for name, prompt in PROMPTS.items():
+            _warn_missing_agent_test_coverage(name)
             print(f"\n=== {name} ===")
-            evaluator.run_eval(
-                prompt=prompt, test_cases=PROMPT_EVAL_CASES.get(name, [])
-            )
+            evaluator = PromptEvaluator(client=client, tools=EVAL_TOOLS.get(name))
+            evaluator.run_eval(prompt, PROMPT_EVAL_CASES.get(name, []))
         return
 
+    evaluator = PromptEvaluator(client=client)
     prompt = sys.argv[1]
     test_cases = evaluator.generate_dataset(prompt)
     evaluator.run_eval(prompt, test_cases)

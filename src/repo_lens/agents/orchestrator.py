@@ -66,6 +66,12 @@ class OnTextCallback(Protocol):
     def __call__(self, text: str) -> None: ...
 
 
+def build_delegate_tool_schema(agent_names: list[str]) -> dict[str, Any]:
+    schema: dict[str, Any] = copy.deepcopy(delegate_to_agent_schema)
+    schema["input_schema"]["properties"]["agent_name"]["enum"] = agent_names
+    return schema
+
+
 class Orchestrator:
     def __init__(
         self,
@@ -85,8 +91,7 @@ class Orchestrator:
             f"- {name.value}: {agent.description}" for name, agent in agents.items()
         ]
 
-        schema: dict[str, Any] = copy.deepcopy(delegate_to_agent_schema)
-        schema["input_schema"]["properties"]["agent_name"]["enum"] = agent_names
+        schema = build_delegate_tool_schema(agent_names)
         self.tools = [schema]
 
         self.system_prompt = PLANNER_SYSTEM_PROMPT_TEMPLATE.format(
