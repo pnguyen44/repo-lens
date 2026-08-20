@@ -116,7 +116,7 @@ class PromptEvaluator:
             logger.error("Failed to generate valid dataset after retries.")
             return []
 
-    def run_prompt(self, *, prompt: str, test_case: dict[str, Any]) -> str:
+    def run_prompt(self, *, prompt: str, test_case: dict[str, Any]) -> ChatResponse:
         prompt = prompt.strip()
         separator = "" if prompt and prompt[-1] in ".?!:" else ":"
         message = f"""
@@ -128,11 +128,8 @@ class PromptEvaluator:
         messages: list[Any] = []
         self.client.add_user_message(messages=messages, content=message)
         response = self._call_with_retry(messages, json_mode=False)
-        if response.stop_reason == "tool_use" and response.tool_calls:
-            return "\n".join(
-                _describe_tool_call(tool_call) for tool_call in response.tool_calls
-            )
-        return response.text
+
+        return response
 
     def grade_output(self, test_case: dict[str, Any], output: str) -> dict[str, Any]:
         eval_prompt = f"""
@@ -167,7 +164,18 @@ class PromptEvaluator:
         self, *, prompt: str, test_case: dict[str, Any]
     ) -> dict[str, Any]:
         output = self.run_prompt(prompt=prompt, test_case=test_case)
-        grade = self.grade_output(test_case, output)
+        called_agent = None
+
+        if output.tool_calls:
+            called_agent = output.tool_calls[0].input.get("agent_name")
+
+        grade = {
+            "input": test_case["input"],
+            "expected": test_case["expected_agent"],
+            "actual": called_agent,
+            "score": 10 if called_agent == test_case["expected_agent"] else 0,
+        }
+
         print(json.dumps(grade, indent=2))
         return grade
 
@@ -175,15 +183,23 @@ class PromptEvaluator:
         if len(test_cases) == 0:
             return
 
-        total = 0
+        passed = 0
         for test_case in test_cases:
             grade = self.run_test_case(prompt=prompt, test_case=test_case)
             score = int(grade["score"])
-            total += score
+            if score == 10:
+                passed += 1
 
-        stats = {"average": round(total / len(test_cases), 2)}
+        total = len(test_cases)
+        pass_rate = round(passed / total, 2)
+        stats = {
+            "passed": passed,
+            "total": total,
+            "pass_rate": pass_rate,
+        }
 
         print(json.dumps(stats, indent=2))
+        print(f"Pass rate: {pass_rate * 100:.1f}%")
 
 
 def main() -> None:
