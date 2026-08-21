@@ -18,6 +18,7 @@ from repo_lens.evals.rag.types import (
     FaithfulnessEvalResult,
     FaithfulnessJudgement,
     RetrievalResult,
+    SweepResult,
 )
 from repo_lens.evals.structured_output import parse_with_retry
 from repo_lens.providers.chat_client import ChatClientProtocol
@@ -187,6 +188,38 @@ class RAGEvaluator:
 
             results.append(result)
         return results
+
+    async def sweep_k(self, k_range: range = range(1, 11)) -> list[SweepResult]:
+        """Run evaluate_retrieval for each k, return aggregate metrics per k."""
+        sweep_results: list[SweepResult] = []
+        for k in k_range:
+            results = await self.evaluate_retrieval(k)
+
+            precisions = [
+                r["section_precision"] for r in results if "section_precision" in r
+            ]
+            recalls = [r["section_recall"] for r in results if "section_recall" in r]
+
+            avg_precision = sum(precisions) / len(precisions) if precisions else 0.0
+            avg_recall = sum(recalls) / len(recalls) if recalls else 0.0
+
+            # F1 balances precision and recall into one score, so sweeping k can be
+            # judged by a single number instead of comparing two curves.
+            f1 = (
+                2 * (avg_precision * avg_recall) / (avg_precision + avg_recall)
+                if (avg_precision + avg_recall) > 0
+                else 0.0
+            )
+
+            sweep_results.append(
+                SweepResult(
+                    k=k,
+                    avg_precision=avg_precision,
+                    avg_recall=avg_recall,
+                    f1=f1,
+                )
+            )
+        return sweep_results
 
     def print_results(self, results: list[EvalResult]) -> None:
         """Print per-question scores and aggregate precision/recall."""

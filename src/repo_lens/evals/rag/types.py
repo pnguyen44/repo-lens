@@ -33,3 +33,10 @@ class EvalResult(TypedDict, total=False):
     section_recall: float
     keyword_recall: float
     judgement: FaithfulnessJudgement | None
+
+
+class SweepResult(TypedDict):
+    k: int
+    avg_precision: float
+    avg_recall: float
+    f1: float
