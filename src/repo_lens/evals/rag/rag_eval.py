@@ -3,7 +3,7 @@ import logging
 import sys
 import textwrap
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from dotenv import load_dotenv
 from voyageai.client_async import AsyncClient as VoyageAsyncClient
@@ -12,6 +12,13 @@ from repo_lens.agents.chat import MAX_RETRIES
 from repo_lens.core.config import create_config
 from repo_lens.evals.rag.models import FaithfulnessVerdict
 from repo_lens.evals.rag.rag_eval_dataset import EVAL_CASES
+from repo_lens.evals.rag.types import (
+    EvalCase,
+    EvalResult,
+    FaithfulnessEvalResult,
+    FaithfulnessJudgement,
+    RetrievalResult,
+)
 from repo_lens.evals.structured_output import parse_with_retry
 from repo_lens.providers.chat_client import ChatClientProtocol
 from repo_lens.providers.provider import create_chat_client
@@ -31,7 +38,7 @@ class RAGEvaluator:
         self,
         embedder: Embedder,
         index: VectorIndex,
-        eval_cases: list[dict[str, Any]],
+        eval_cases: list[EvalCase],
         fixture_path: Path,
         chat_client: ChatClientProtocol | None = None,
     ) -> None:
@@ -82,7 +89,7 @@ class RAGEvaluator:
 
     def judge_faithfulness(
         self, context: str, question: str, answer: str
-    ) -> dict[str, Any]:
+    ) -> FaithfulnessJudgement:
         if self.chat_client is None:
             raise ValueError("chat_client required for judge faithfulness")
         eval_prompt = textwrap.dedent(f"""\
@@ -98,23 +105,24 @@ class RAGEvaluator:
         response = self.chat_client.chat_json(messages=messages)
 
         try:
-            return parse_with_retry(
+            result = parse_with_retry(
                 chat_client=self.chat_client,
                 response=response,
                 messages=messages,
                 model_type=FaithfulnessVerdict,
                 max_retries=MAX_RETRIES,
-            ).model_dump()
+            )
+            return cast(FaithfulnessJudgement, result.model_dump())
         except ValueError:
-            return {
-                "verdict": "unknown",
-                "reasoning": "Failed to parse grade",
-            }
+            return FaithfulnessJudgement(
+                verdict="unknown",
+                reasoning="Failed to parse grade",
+            )
 
-    async def evaluate_faithfulness(self, k: int = 3) -> list[dict[str, Any]]:
+    async def evaluate_faithfulness(self, k: int = 3) -> list[FaithfulnessEvalResult]:
         if not self.chat_client:
             return []
-        results: list[dict[str, Any]] = []
+        results: list[FaithfulnessEvalResult] = []
         for case in self.eval_cases:
             question = str(case["question"])
             try:
@@ -145,18 +153,18 @@ class RAGEvaluator:
         recall = len(true_positions) / len(expected) if expected else 0.0
         return precision, recall
 
-    async def evaluate_retrieval(self, k: int = 3) -> list[dict[str, Any]]:
+    async def evaluate_retrieval(self, k: int = 3) -> list[RetrievalResult]:
         """Run each eval case: embed the question, search, compute precision and recall."""
         questions: list[str] = [str(case["question"]) for case in self.eval_cases]
         query_vectors = await self.embedder.generate_embeddings(
             texts=questions, input_type=InputType.QUERY
         )
 
-        results = []
+        results: list[RetrievalResult] = []
 
         for case, query_vector in zip(self.eval_cases, query_vectors):
             hits = await self.index.search(query=query_vector, k=k)
-            result: dict[str, Any] = {"question": case["question"]}
+            result: RetrievalResult = {"question": case["question"]}
 
             if "expected_sections" in case:
                 retrieved_sections = {
@@ -180,7 +188,7 @@ class RAGEvaluator:
             results.append(result)
         return results
 
-    def print_results(self, results: list[dict[str, Any]]) -> None:
+    def print_results(self, results: list[EvalResult]) -> None:
         """Print per-question scores and aggregate precision/recall."""
         for r in results:
             print(f"\nQ: {r['question']}")
@@ -191,11 +199,14 @@ class RAGEvaluator:
             if "keyword_recall" in r:
                 print(f"  Keyword Recall: {r['keyword_recall']:.2f}")
 
-            if r.get("judgement"):
-                print(f"  Faithfulness: {r['judgement']['verdict']}")
+            judgement = r.get("judgement")
+            if judgement:
+                print(f"  Faithfulness: {judgement['verdict']}")
 
         print("\n---")
-        verdicts = [r["judgement"]["verdict"] for r in results if r.get("judgement")]
+        verdicts = [
+            j["verdict"] for r in results if (j := r.get("judgement")) is not None
+        ]
         if verdicts:
             grounded = verdicts.count("grounded")
             print(f"Faithfulness: {grounded}/{len(verdicts)} grounded")
@@ -239,11 +250,13 @@ async def main() -> None:
             chat_client=chat_client,
         )
         await rag_evaluator.load_and_index()
-        results = await rag_evaluator.evaluate_retrieval()
+        retrieval_results = await rag_evaluator.evaluate_retrieval()
         faithfulness_results = await rag_evaluator.evaluate_faithfulness()
-        for r, f in zip(results, faithfulness_results):
-            r["judgement"] = f["judgement"]
-        rag_evaluator.print_results(results)
+        combined: list[EvalResult] = [
+            {**r, "judgement": f["judgement"]}
+            for r, f in zip(retrieval_results, faithfulness_results)
+        ]
+        rag_evaluator.print_results(combined)
     except Exception as e:
         print(f"Error: {e}")
         sys.exit(1)

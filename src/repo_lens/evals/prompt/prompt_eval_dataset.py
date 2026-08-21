@@ -4,7 +4,9 @@ Criteria are text-based: they grade whether the model's response signals the
 right delegation intent. Tool-call responses are converted to text before grading.
 """
 
-PROMPT_EVAL_CASES: dict[str, list[dict[str, object]]] = {
+from repo_lens.evals.prompt.types import PromptTestCase
+
+PROMPT_EVAL_CASES: dict[str, list[PromptTestCase]] = {
     "planner": [
         {
             "input": "How does authentication work in this codebase?",

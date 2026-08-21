@@ -13,6 +13,7 @@ from repo_lens.core.retry import wait_for_retry_sync
 from repo_lens.evals.prompt.models import GradeResult, TestCase
 from repo_lens.evals.prompt.prompt_eval_dataset import PROMPT_EVAL_CASES
 from repo_lens.evals.prompt.prompts import EVAL_TOOLS, PROMPTS
+from repo_lens.evals.prompt.types import GradeOutput, PromptTestCase, TestCaseResult
 from repo_lens.evals.structured_output import parse_with_retry
 from repo_lens.providers.chat_client import ChatClientProtocol, ChatResponse, ToolCall
 from repo_lens.providers.provider import create_chat_client
@@ -84,7 +85,7 @@ class PromptEvaluator:
 
     def generate_dataset(
         self, prompt: str, total_tests: int = 3, max_tries: int = 2
-    ) -> list[dict[str, Any]]:
+    ) -> list[PromptTestCase]:
         dataset_prompt = f"""
         I have this prompt that I want to evaluate:
         "{prompt}"
@@ -108,7 +109,10 @@ class PromptEvaluator:
 
         try:
             result = adapter.validate_json(text)
-            return [case.model_dump() for case in result]
+            return [
+                PromptTestCase(input=case.input, criteria=case.criteria)
+                for case in result
+            ]
         except ValidationError:
             if max_tries > 0:
                 logger.warning("Failed to parse generated dataset. Retrying")
@@ -116,7 +120,7 @@ class PromptEvaluator:
             logger.error("Failed to generate valid dataset after retries.")
             return []
 
-    def run_prompt(self, *, prompt: str, test_case: dict[str, Any]) -> ChatResponse:
+    def run_prompt(self, *, prompt: str, test_case: PromptTestCase) -> ChatResponse:
         prompt = prompt.strip()
         separator = "" if prompt and prompt[-1] in ".?!:" else ":"
         message = f"""
@@ -131,7 +135,7 @@ class PromptEvaluator:
 
         return response
 
-    def grade_output(self, test_case: dict[str, Any], output: str) -> dict[str, Any]:
+    def grade_output(self, test_case: PromptTestCase, output: str) -> GradeOutput:
         eval_prompt = f"""
         Evaluate this response.
 
@@ -146,40 +150,47 @@ class PromptEvaluator:
         response = self._call_with_retry(messages, json_mode=True)
 
         try:
-            return parse_with_retry(
+            result = parse_with_retry(
                 chat_client=self.client,
                 response=response,
                 messages=messages,
                 model_type=GradeResult,
-            ).model_dump()
+            )
+            return GradeOutput(
+                strengths=result.strengths,
+                weaknesses=result.weaknesses,
+                reasoning=result.reasoning,
+                score=result.score,
+            )
         except ValueError:
-            return {
-                "strengths": [],
-                "weaknesses": [],
-                "reasoning": "Failed to parse grade",
-                "score": 0,
-            }
+            return GradeOutput(
+                strengths=[],
+                weaknesses=[],
+                reasoning="Failed to parse grade",
+                score=0,
+            )
 
     def run_test_case(
-        self, *, prompt: str, test_case: dict[str, Any]
-    ) -> dict[str, Any]:
+        self, *, prompt: str, test_case: PromptTestCase
+    ) -> TestCaseResult:
         output = self.run_prompt(prompt=prompt, test_case=test_case)
-        called_agent = None
+        called_agent: str | None = None
 
         if output.tool_calls:
             called_agent = output.tool_calls[0].input.get("agent_name")
 
-        grade = {
-            "input": test_case["input"],
-            "expected": test_case["expected_agent"],
-            "actual": called_agent,
-            "score": 10 if called_agent == test_case["expected_agent"] else 0,
-        }
+        expected_agent = test_case.get("expected_agent")
+        result = TestCaseResult(
+            input=test_case["input"],
+            expected=expected_agent,
+            actual=called_agent,
+            score=10 if called_agent == expected_agent else 0,
+        )
 
-        print(json.dumps(grade, indent=2))
-        return grade
+        print(json.dumps(result, indent=2))
+        return result
 
-    def run_eval(self, prompt: str, test_cases: list[dict[str, Any]]) -> None:
+    def run_eval(self, prompt: str, test_cases: list[PromptTestCase]) -> None:
         if len(test_cases) == 0:
             return
 

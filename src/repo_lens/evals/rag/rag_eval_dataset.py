@@ -1,4 +1,6 @@
-EVAL_CASES: list[dict[str, str | list[str]]] = [
+from repo_lens.evals.rag.types import EvalCase
+
+EVAL_CASES: list[EvalCase] = [
     {
         "question": "What database does hyperfleet-api use?",
         "expected_sections": ["Architecture"],

@@ -1,8 +1,8 @@
-from typing import Literal
-
 from pydantic import BaseModel
+
+from repo_lens.evals.rag.types import Verdict
 
 
 class FaithfulnessVerdict(BaseModel):
-    verdict: Literal["grounded", "partial", "hallucinated"]
+    verdict: Verdict
     reasoning: str
