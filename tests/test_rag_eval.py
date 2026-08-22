@@ -7,8 +7,10 @@ from repo_lens.evals.rag.rag_eval import RAGEvaluator
 
 
 def _make_evaluator() -> RAGEvaluator:
+    embedder = MagicMock()
+    embedder.generate_embeddings = AsyncMock(return_value=[])
     return RAGEvaluator(
-        embedder=MagicMock(),
+        embedder=embedder,
         index=MagicMock(),
         eval_cases=[{"question": "q1"}],
         fixture_path=Path("unused.md"),
@@ -42,7 +44,7 @@ async def test_sweep_k_computes_metrics(case) -> None:
     results = await evaluator.sweep_k(k_range=range(3, 4))
 
     assert results == [{"k": 3, **case["expected"]}]
-    evaluator.evaluate_retrieval.assert_awaited_once_with(3)
+    evaluator.evaluate_retrieval.assert_awaited_once_with(k=3, query_vectors=[])
 
 
 async def test_sweep_k_runs_once_per_k_in_range() -> None:

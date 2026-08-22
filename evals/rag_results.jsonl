@@ -1,0 +1,10 @@
+{"k": 1, "avg_precision": 0.9, "avg_recall": 0.9, "f1": 0.9, "timestamp": "2026-08-22T20:47:14.300804+00:00"}
+{"k": 2, "avg_precision": 0.5, "avg_recall": 1.0, "f1": 0.67, "timestamp": "2026-08-22T20:47:14.300804+00:00"}
+{"k": 3, "avg_precision": 0.33, "avg_recall": 1.0, "f1": 0.5, "timestamp": "2026-08-22T20:47:14.300804+00:00"}
+{"k": 4, "avg_precision": 0.25, "avg_recall": 1.0, "f1": 0.4, "timestamp": "2026-08-22T20:47:14.300804+00:00"}
+{"k": 5, "avg_precision": 0.2, "avg_recall": 1.0, "f1": 0.33, "timestamp": "2026-08-22T20:47:14.300804+00:00"}
+{"k": 6, "avg_precision": 0.17, "avg_recall": 1.0, "f1": 0.29, "timestamp": "2026-08-22T20:47:14.300804+00:00"}
+{"k": 7, "avg_precision": 0.14, "avg_recall": 1.0, "f1": 0.25, "timestamp": "2026-08-22T20:47:14.300804+00:00"}
+{"k": 8, "avg_precision": 0.12, "avg_recall": 1.0, "f1": 0.21, "timestamp": "2026-08-22T20:47:14.300804+00:00"}
+{"k": 9, "avg_precision": 0.12, "avg_recall": 1.0, "f1": 0.21, "timestamp": "2026-08-22T20:47:14.300804+00:00"}
+{"k": 10, "avg_precision": 0.12, "avg_recall": 1.0, "f1": 0.21, "timestamp": "2026-08-22T20:47:14.300804+00:00"}

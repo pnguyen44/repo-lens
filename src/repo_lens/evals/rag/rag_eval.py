@@ -21,6 +21,7 @@ from repo_lens.evals.rag.types import (
     SweepResult,
 )
 from repo_lens.evals.structured_output import parse_with_retry
+from repo_lens.evals.utils import append_jsonl, print_table
 from repo_lens.providers.chat_client import ChatClientProtocol
 from repo_lens.providers.provider import create_chat_client
 from repo_lens.rag.chunker import chunk_by_section
@@ -32,6 +33,8 @@ logger = logging.getLogger(__name__)
 FIXTURE_PATH = (
     Path(__file__).resolve().parents[4] / "tests/fixtures/hyperfleet_api_readme.md"
 )
+
+RAG_EVAL_RESULT_PATH = Path(__file__).resolve().parents[4] / "evals/rag_results.jsonl"
 
 
 class RAGEvaluator:
@@ -154,12 +157,19 @@ class RAGEvaluator:
         recall = len(true_positions) / len(expected) if expected else 0.0
         return precision, recall
 
-    async def evaluate_retrieval(self, k: int = 3) -> list[RetrievalResult]:
+    @property
+    def _questions(self) -> list[str]:
+        return [str(case["question"]) for case in self.eval_cases]
+
+    async def evaluate_retrieval(
+        self, k: int = 3, query_vectors: list[list[float]] | None = None
+    ) -> list[RetrievalResult]:
         """Run each eval case: embed the question, search, compute precision and recall."""
-        questions: list[str] = [str(case["question"]) for case in self.eval_cases]
-        query_vectors = await self.embedder.generate_embeddings(
-            texts=questions, input_type=InputType.QUERY
-        )
+
+        if query_vectors is None:
+            query_vectors = await self.embedder.generate_embeddings(
+                texts=self._questions, input_type=InputType.QUERY
+            )
 
         results: list[RetrievalResult] = []
 
@@ -191,24 +201,30 @@ class RAGEvaluator:
 
     async def sweep_k(self, k_range: range = range(1, 11)) -> list[SweepResult]:
         """Run evaluate_retrieval for each k, return aggregate metrics per k."""
+        query_vectors = await self.embedder.generate_embeddings(
+            texts=self._questions, input_type=InputType.QUERY
+        )
         sweep_results: list[SweepResult] = []
         for k in k_range:
-            results = await self.evaluate_retrieval(k)
+            results = await self.evaluate_retrieval(k=k, query_vectors=query_vectors)
 
             precisions = [
                 r["section_precision"] for r in results if "section_precision" in r
             ]
             recalls = [r["section_recall"] for r in results if "section_recall" in r]
 
-            avg_precision = sum(precisions) / len(precisions) if precisions else 0.0
-            avg_recall = sum(recalls) / len(recalls) if recalls else 0.0
+            avg_precision = round(
+                sum(precisions) / len(precisions) if precisions else 0.0, 2
+            )
+            avg_recall = round(sum(recalls) / len(recalls) if recalls else 0.0, 2)
 
             # F1 balances precision and recall into one score, so sweeping k can be
             # judged by a single number instead of comparing two curves.
-            f1 = (
+            f1 = round(
                 2 * (avg_precision * avg_recall) / (avg_precision + avg_recall)
                 if (avg_precision + avg_recall) > 0
-                else 0.0
+                else 0.0,
+                2,
             )
 
             sweep_results.append(
@@ -267,13 +283,13 @@ class RAGEvaluator:
             )
 
 
-async def main() -> None:
+async def main(sweep: bool = False) -> None:
     load_dotenv()
     config = create_config()
     try:
         index = VectorIndex()
         embedder = VoyageEmbedder(VoyageAsyncClient(), model=config.voyage_embed_model)
-        chat_client = create_chat_client(config=config)
+        chat_client = None if sweep else create_chat_client(config=config)
 
         rag_evaluator = RAGEvaluator(
             index=index,
@@ -283,6 +299,15 @@ async def main() -> None:
             chat_client=chat_client,
         )
         await rag_evaluator.load_and_index()
+
+        if sweep:
+            sweep_results = await rag_evaluator.sweep_k()
+            print_table([dict(r) for r in sweep_results])
+            append_jsonl(
+                results=[dict(r) for r in sweep_results], path=RAG_EVAL_RESULT_PATH
+            )
+            return
+
         retrieval_results = await rag_evaluator.evaluate_retrieval()
         faithfulness_results = await rag_evaluator.evaluate_faithfulness()
         combined: list[EvalResult] = [
@@ -290,10 +315,12 @@ async def main() -> None:
             for r, f in zip(retrieval_results, faithfulness_results)
         ]
         rag_evaluator.print_results(combined)
+
     except Exception as e:
         print(f"Error: {e}")
         sys.exit(1)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    sweep = "--sweep" in sys.argv
+    asyncio.run(main(sweep=sweep))

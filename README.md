@@ -183,6 +183,14 @@ Measures retrieval quality (precision, recall) against a golden eval dataset to 
 make rag-eval
 ```
 
+**K-sweep:** Runs retrieval evaluation across K=1..10 to find the optimal number of chunks to retrieve, balancing precision against recall (scored via F1). Results print as a table and append to `evals/rag_results.jsonl` for historical comparison across runs.
+
+```bash
+make rag-eval-sweep
+```
+
+**Retrieval tuning decision:** K=3 (default). The sweep shows recall hits 100% at K=2 while precision drops with each additional chunk. K=3 adds a safety margin for recall. Retrieving 2-3 chunks gives the LLM richer context for synthesizing answers, even when not all chunks match the single expected section in the eval dataset.
+
 ### Prompt Eval Tool
 
 Evaluate how well a prompt performs by auto-generating test cases and scoring responses with LLM-as-judge.

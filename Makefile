@@ -1,4 +1,4 @@
-.PHONY: build chroma run-cli run-ui run-ui-docker down clean-chroma install test e2e test-all lint prompt-eval rag-eval index
+.PHONY: build chroma run-cli run-ui run-ui-docker down clean-chroma install test e2e test-all lint prompt-eval rag-eval rag-eval-sweep index
 
 build:
 	docker compose build
@@ -47,6 +47,9 @@ prompt-eval:
 
 rag-eval:
 	uv run python -m repo_lens.evals.rag.rag_eval
+
+rag-eval-sweep:
+	uv run python -m repo_lens.evals.rag.rag_eval --sweep
 
 index:
 	uv run python -m repo_lens.rag.indexer
