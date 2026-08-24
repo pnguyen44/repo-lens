@@ -13,6 +13,8 @@
 - [Cross-cutting Concepts](#cross-cutting-concepts)
   - [Multi-Provider Support](#multi-provider-support)
   - [Streaming](#streaming)
+  - [Prompt Caching](#prompt-caching)
+  - [Structured Output](#structured-output)
   - [Observability](#observability)
   - [Error Handling](#error-handling)
 - [Quality](#quality)
@@ -64,6 +66,12 @@ sequenceDiagram
 
 The active repository is passed as typed data through the orchestrator, automatically scoping prompts and tool calls to that repo.
 
+#### Fail-Closed on Empty Delegation
+
+When a specialist returns an empty result, the orchestrator retries once. If still empty, it returns an honest "I couldn't retrieve that information" message instead of forwarding the empty result to the planner.
+
+Without this, the planner hallucinates from the empty tool result: it invents an answer rather than admitting it has no data. Observed in practice with Gemini (specialist produced no output, planner fabricated a response).
+
 ### MCP Integration
 
 MCP (Model Context Protocol) servers run as subprocesses, connected via stdio. The system can register multiple MCP clients (e.g., GitHub).
@@ -84,35 +92,32 @@ This lets agents gather information across multiple tool calls before synthesizi
 
 ### RAG Pipeline
 
-Query flow: chunk → embed → hybrid search (vector + BM25 via RRF) → optional rerank → top-k context.
+Query flow: chunk → embed → hybrid search (vector + BM25 via RRF) → rerank → top-k context.
 
-| Stage | Component | Notes |
-| --- | --- | --- |
-| Chunk & Embed | `chunker.py`, `VoyageEmbedder` | Splits fetched content into chunks, embeds with VoyageAI |
-| Hybrid Search | `HybridRetriever` | Vector index + `BM25Index`, merged via Reciprocal Rank Fusion (RRF) |
-| Rerank (optional) | `VoyageReranker` | Cross-encoder narrows RRF candidates to the most relevant few |
+**Design decisions:**
 
-**Tuning decisions:**
-
+- **Section-based chunking**. Content is split on `##` markdown headers, preserving natural topic boundaries. This fits the input (GitHub READMEs) better than fixed-size or sentence-based chunking, which would split mid-section.
+- **Hybrid search** (vector + BM25). Vector search handles semantic similarity (paraphrased queries, synonyms) but misses exact terms. BM25 handles exact keyword matches but has no semantic understanding. Combining both with RRF surfaces documents that rank well across both systems.
+- **Reranking**. Embedding search scores the query and each document independently. A cross-encoder reranker reads them together, producing more accurate relevance scores. It's too slow to run on the full index, so it only scores the top candidates from hybrid search.
 - **K=3** (default). The K-sweep shows recall hits 100% at K=2 while precision drops with each additional chunk. K=3 adds a safety margin for recall. Retrieving 2-3 chunks gives the LLM richer context for synthesizing answers, even when not all chunks match the single expected section in the eval dataset.
-- **Cosine similarity** (default). VoyageAI embeddings are unit-normalized (length 1), which makes cosine, dot product, and Euclidean distance rank-equivalent — all three produce identical retrieval results. Cosine is the conventional default across vector DBs and embedding providers.
+- **Cosine similarity** (default). VoyageAI embeddings are unit-normalized (length 1), which makes cosine, dot product, and Euclidean distance rank-equivalent. All three produce identical retrieval results. Cosine is the conventional default across vector DBs and embedding providers.
 
 ## Data Layer
 
 ### Indexing Lifecycle
 
-Files are indexed lazily, not eagerly, to avoid embedding an entire repo upfront.
+Files are indexed lazily, not eagerly. Eager indexing (embedding the entire repo upfront) wastes compute and API calls on files that are never queried.
 
-- **On-demand indexing** — `GitHubAgent` indexes a file the first time the LLM fetches it via MCP. Each chunk is tagged with a `file_key`, so already-indexed files are skipped on refetch.
-- **`/clear-cache`** — `DocumentIndexer` drops all chunks for the active repo from the vector store. The next file fetch re-indexes from scratch.
-- **Startup sync** — `DocumentIndexer` rebuilds the in-memory BM25 index from the vector store on boot, so restarts don't re-embed (and re-bill) existing content.
+- **On-demand indexing**: `GitHubAgent` indexes a file the first time the LLM fetches it via MCP. Each chunk is tagged with a `file_key`, so already-indexed files are skipped on refetch.
+- **`/clear-cache`**: `DocumentIndexer` drops all chunks for the active repo from the vector store. The next file fetch re-indexes from scratch.
+- **Startup sync**: `DocumentIndexer` rebuilds the in-memory BM25 index from the vector store on boot, so restarts don't re-embed (and re-bill) existing content.
 
 ### Persistence
 
 | Layer | Backend | Lifetime |
 | --- | --- | --- |
-| Vector index | `QdrantVectorIndex` (default) or `ChromaVectorIndex`, selected via `VECTOR_STORE` config | Persistent — source of truth for indexed chunks |
-| Keyword index | `BM25Index` | In-memory only — rebuilt from the vector store on startup |
+| Vector index | `QdrantVectorIndex` (default) or `ChromaVectorIndex`, selected via `VECTOR_STORE` config | Persistent; source of truth for indexed chunks |
+| Keyword index | `BM25Index` | In-memory only; rebuilt from the vector store on startup |
 
 Both vector backends implement `BaseVectorIndex`, so `HybridRetriever` and `DocumentIndexer` are backend-agnostic.
 
@@ -134,6 +139,16 @@ Responses stream token-by-token from the LLM to the caller (CLI or Chainlit).
 Claude and Gemini SDKs send stream data in different formats. Each provider normalizes these into a common chunk format, so the rest of the app doesn't need to know which LLM is running.
 
 The caller provides a callback that handles each text chunk as it arrives.
+
+### Prompt Caching
+
+System prompts and tool definitions are cached across requests using Anthropic's `cache_control`. Two `"ephemeral"` markers are placed: one on the system prompt block and one on the last tool definition. In a multi-turn conversation, the system prompt and tool schemas are identical every turn, so caching avoids re-processing them.
+
+### Structured Output
+
+LLM responses are parsed into Pydantic models (`model_validate_json`) to enforce schema compliance. When validation fails, the error message is fed back to the LLM for self-correction (retry with the validation error as context). This catches malformed JSON, missing fields, and wrong types instead of silent failures downstream.
+
+Used in both eval pipelines to parse grading results from the LLM.
 
 ### Observability
 
@@ -187,6 +202,6 @@ Deterministic grading: pass if `actual == expected`, fail otherwise. No LLM judg
 
 Cross-cutting concerns that both eval pipelines share.
 
-- **Structured output** — LLM responses are parsed into Pydantic models with self-correction on validation failure
-- **Rate limit handling** — retry loop with exponential backoff for Anthropic/Gemini rate limits
-- **Golden datasets** — hand-curated test cases in `*_eval_dataset.py` files
+- **Structured output**: LLM responses are parsed into Pydantic models with self-correction on validation failure
+- **Rate limit handling**: retry loop with exponential backoff for Anthropic/Gemini rate limits
+- **Golden datasets**: hand-curated test cases in `*_eval_dataset.py` files
