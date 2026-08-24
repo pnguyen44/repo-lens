@@ -45,7 +45,8 @@ Available agents:
 {agents}
 
 Rules:
-- Always delegate to an agent. Do not answer directly.
+- Delegate to an agent when the user's request matches an agent's capability.
+- If the request is casual conversation, a greeting, or something no agent can handle, respond directly without delegating.
 - After receiving agent results, synthesize a final answer for the user.
 - When citing docs or files, use full GitHub URLs only
   (`https://github.com/{{owner}}/{{repo}}/blob/main/...`).
