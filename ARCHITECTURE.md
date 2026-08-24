@@ -92,6 +92,11 @@ Query flow: chunk → embed → hybrid search (vector + BM25 via RRF) → option
 | Hybrid Search | `HybridRetriever` | Vector index + `BM25Index`, merged via Reciprocal Rank Fusion (RRF) |
 | Rerank (optional) | `VoyageReranker` | Cross-encoder narrows RRF candidates to the most relevant few |
 
+**Tuning decisions:**
+
+- **K=3** (default). The K-sweep shows recall hits 100% at K=2 while precision drops with each additional chunk. K=3 adds a safety margin for recall. Retrieving 2-3 chunks gives the LLM richer context for synthesizing answers, even when not all chunks match the single expected section in the eval dataset.
+- **Cosine similarity** (default). VoyageAI embeddings are unit-normalized (length 1), which makes cosine, dot product, and Euclidean distance rank-equivalent — all three produce identical retrieval results. Cosine is the conventional default across vector DBs and embedding providers.
+
 ## Data Layer
 
 ### Indexing Lifecycle
