@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import re
 
 from mcp.types import EmbeddedResource, TextContent, TextResourceContents
 from voyageai.client_async import AsyncClient as VoyageAsyncClient
@@ -12,7 +13,7 @@ from repo_lens.rag.bm25_index import BM25Index
 from repo_lens.rag.chunker import chunk_by_section
 from repo_lens.rag.embeddings import InputType, VoyageEmbedder
 from repo_lens.rag.hybrid_retriever import HybridRetriever
-from repo_lens.rag.types import IndexedDocument
+from repo_lens.rag.types import FetchedFile, IndexedDocument
 from repo_lens.rag.vector_index import VectorIndex
 
 logger = logging.getLogger(__name__)
@@ -24,9 +25,9 @@ EXCLUDE_FILES = {"CLAUDE.md", "AGENTS.md"}
 
 
 def file_path_to_chunks(
-    repo_context: RepoContext, path: str, text: str
+    repo_context: RepoContext, path: str, fetched_file: FetchedFile
 ) -> list[IndexedDocument]:
-    chunks = [c for c in chunk_by_section(text) if c.strip()]
+    chunks = [c for c in chunk_by_section(fetched_file.text) if c.strip()]
     documents: list[IndexedDocument] = []
 
     for chunk in chunks:
@@ -44,6 +45,7 @@ def file_path_to_chunks(
                 "path": path,
                 "section": section,
                 "url": url,
+                "sha": fetched_file.sha,
             }
         )
     return documents
@@ -54,8 +56,9 @@ class RepoContentFetcher:
         self.mcp_client = mcp_client
         self.repo_context = repo_context
 
-    async def fetch_file(self, path: str) -> str:
+    async def fetch_file(self, path: str) -> FetchedFile:
         text = ""
+        sha = ""
 
         result = await self.mcp_client.call_tool(
             "get_file_contents",
@@ -67,7 +70,11 @@ class RepoContentFetcher:
         )
 
         for item in result.content:
-            if isinstance(item, EmbeddedResource) and isinstance(
+            if isinstance(item, TextContent):
+                match = re.search(r"SHA:\s*([a-f0-9]+)", item.text)
+                if match:
+                    sha = match.group(1)
+            elif isinstance(item, EmbeddedResource) and isinstance(
                 item.resource, TextResourceContents
             ):
                 text = item.resource.text
@@ -77,7 +84,10 @@ class RepoContentFetcher:
                 f"No context found for {self.repo_context.owner}/{self.repo_context.repo} on {path}"
             )
 
-        return text
+        if not sha:
+            logger.warning("No SHA found in get_file_contents response for %s", path)
+
+        return FetchedFile(text=text, sha=sha)
 
     async def fetch_md_file_list(self) -> list[str]:
         return await self._walk_dir("")
@@ -110,8 +120,10 @@ class RepoContentFetcher:
         return md_files
 
     async def fetch_file_chunks(self, path: str) -> list[IndexedDocument]:
-        text = await self.fetch_file(path)
-        return file_path_to_chunks(repo_context=self.repo_context, path=path, text=text)
+        fetched_file = await self.fetch_file(path)
+        return file_path_to_chunks(
+            repo_context=self.repo_context, path=path, fetched_file=fetched_file
+        )
 
     async def fetch_repo_chunks(self) -> list[IndexedDocument]:
         repo_name = self.repo_context.key

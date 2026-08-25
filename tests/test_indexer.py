@@ -7,6 +7,7 @@ from repo_lens.core.repo_context import RepoContext
 from repo_lens.rag.bm25_index import BM25Index
 from repo_lens.rag.hybrid_retriever import HybridRetriever
 from repo_lens.rag.indexer import RepoContentFetcher
+from repo_lens.rag.types import FetchedFile
 from repo_lens.rag.vector_index import VectorIndex
 
 
@@ -44,7 +45,7 @@ def mock_single_file():
             RepoContentFetcher,
             "fetch_file",
             new_callable=AsyncMock,
-            return_value=fake_readme,
+            return_value=FetchedFile(text=fake_readme, sha="abc123"),
         ),
     ):
         yield None
@@ -98,7 +99,7 @@ async def test_fetch_repo_chunks_empty_file():
             RepoContentFetcher,
             "fetch_file",
             new_callable=AsyncMock,
-            return_value="",
+            return_value=FetchedFile(text="", sha=""),
         ),
     ):
         docs = await make_fetcher(
@@ -128,7 +129,7 @@ async def test_fetch_repo_chunks_counts(content, expected_chunks):
             RepoContentFetcher,
             "fetch_file",
             new_callable=AsyncMock,
-            return_value=content,
+            return_value=FetchedFile(text=content, sha="abc123"),
         ),
     ):
         docs = await make_fetcher(

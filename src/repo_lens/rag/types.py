@@ -1,4 +1,9 @@
-from typing import NotRequired, TypedDict
+from typing import NamedTuple, NotRequired, TypedDict
+
+
+class FetchedFile(NamedTuple):
+    text: str
+    sha: str
 
 
 class IndexedDocument(TypedDict):
@@ -8,6 +13,7 @@ class IndexedDocument(TypedDict):
     file_key: NotRequired[str]
     section: NotRequired[str]
     url: NotRequired[str]
+    sha: NotRequired[str]
 
 
 def validate_document(document: object, index: int | None = None) -> None:
