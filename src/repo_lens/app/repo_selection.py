@@ -164,6 +164,9 @@ async def switch_repo(
         return
     if new_repo_context is not None:
         state.set_repo(new_repo_context)
+        app.orchestrator.reset_conversation(
+            note=f"[System: repository switched to {new_repo_context.key}]"
+        )
         await on_message(repo_ready_message(state.repo_context.key, switched=True))
 
 

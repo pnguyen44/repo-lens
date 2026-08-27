@@ -99,6 +99,11 @@ class Orchestrator:
             agents="\n".join(agent_lines)
         )
 
+    def reset_conversation(self, note: str | None = None) -> None:
+        self.messages = []
+        if note:
+            self.chat_client.add_user_message(messages=self.messages, content=note)
+
     async def _stream(
         self,
         on_text: OnTextCallback | None = None,
