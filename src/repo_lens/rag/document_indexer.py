@@ -74,3 +74,22 @@ class DocumentIndexer:
         self, *, query: str, k: int = 5, repo: str | None = None
     ) -> list[tuple[IndexedDocument, float]]:
         return await self._retriever.search(query_text=query, k=k, repo=repo)
+
+    async def get_indexed_sha(self, repo: str, path: str) -> str | None:
+        return await self._vector_index.get_metadata(
+            metadata_key="file_key",
+            metadata_value=self._file_key(repo=repo, path=path),
+            field="sha",
+        )
+
+    async def evict_file(self, repo: str, path: str) -> int:
+        removed = await self._vector_index.remove_from_collection(
+            metadata_key="file_key", metadata_value=self._file_key(repo=repo, path=path)
+        )
+
+        if not removed:
+            return 0
+
+        await self._sync_retriever()
+        logger.info("Evicted %s (%d chunks removed)", path, removed)
+        return removed

@@ -109,6 +109,25 @@ class ChromaVectorIndex(BaseVectorIndex):
             for doc_text, metadata in zip(results["documents"], results["metadatas"])
         ]
 
+    async def get_metadata(
+        self, metadata_key: str, metadata_value: str, field: str
+    ) -> str | None:
+        results = await asyncio.to_thread(
+            self._collection.get,
+            where={metadata_key: metadata_value},
+            limit=1,
+            include=["metadatas"],
+        )
+
+        if not results["ids"]:
+            return None
+
+        metadatas = results["metadatas"]
+        if not metadatas:
+            return None
+        value = metadatas[0].get(field)
+        return str(value) if value is not None else None
+
     async def exists_in_collection(
         self, metadata_key: str, metadata_value: str
     ) -> bool:

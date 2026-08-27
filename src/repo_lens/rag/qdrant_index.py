@@ -159,6 +159,32 @@ class QdrantVectorIndex(BaseVectorIndex):
 
         return len(results) > 0
 
+    async def get_metadata(
+        self, metadata_key: str, metadata_value: str, field: str
+    ) -> str | None:
+        results, _ = await asyncio.to_thread(
+            self._client.scroll,
+            collection_name=self._collection_name,
+            scroll_filter=Filter(
+                must=[
+                    FieldCondition(
+                        key=metadata_key, match=MatchValue(value=metadata_value)
+                    )
+                ]
+            ),
+            limit=1,
+            with_payload=True,
+            with_vectors=False,
+        )
+
+        if not results:
+            return None
+
+        payload = results[0].payload
+        if payload is None:
+            return None
+        return str(payload[field]) if field in payload else None
+
     async def remove_from_collection(
         self, metadata_key: str, metadata_value: str
     ) -> int:
