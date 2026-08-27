@@ -2,7 +2,12 @@ import json
 import logging
 from typing import Any, Awaitable, Callable, Literal
 
-from mcp.types import CallToolResult, TextContent
+from mcp.types import (
+    CallToolResult,
+    EmbeddedResource,
+    TextContent,
+    TextResourceContents,
+)
 
 from repo_lens.core.mcp_client import MCPClient
 from repo_lens.core.repo_context import RepoContext
@@ -93,9 +98,14 @@ class ToolManager:
                 items = []
                 if tool_output:
                     items = tool_output.content
-                content_list = [
-                    item.text for item in items if isinstance(item, TextContent)
-                ]
+                content_list = []
+                for item in items:
+                    if isinstance(item, TextContent):
+                        content_list.append(item.text)
+                    elif isinstance(item, EmbeddedResource) and isinstance(
+                        item.resource, TextResourceContents
+                    ):
+                        content_list.append(item.resource.text)
                 logger.debug("tool result: %s", content_list)
 
                 result_status: Literal["success", "error"] = (
