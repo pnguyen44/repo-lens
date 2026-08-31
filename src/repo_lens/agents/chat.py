@@ -73,11 +73,13 @@ class Chat:
 
         try:
             k = 15 if self.reranker else 3
+            repo_key = self.repo_context.key if self.repo_context else None
             results = await self.hybrid_retriever.search(
                 query_text=query,
                 k=k,
-                repo=self.repo_context.key if self.repo_context else None,
+                repo=repo_key,
             )
+            logger.info("RAG search: repo=%s, results=%d", repo_key, len(results))
 
             if self.reranker:
                 docs = [doc["content"] for (doc, _dist) in results]
@@ -104,6 +106,11 @@ class Chat:
             ]
 
             if not sources:
+                logger.info(
+                    "RAG search: repo=%s, no sources after context build; "
+                    "falling back to ungrounded query",
+                    repo_key,
+                )
                 return ""
             sources.append({"type": "text", "text": query})
 
