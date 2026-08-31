@@ -18,4 +18,4 @@ An AI-powered tool for exploring and understanding GitHub repositories.
 - `/repo owner/repo` — switch the active repository mid-chat.
   - **Syntax:** `/repo owner/repo` or `/repo <repo-name>` after `/org <name>`
   - **Examples:** `/repo openshift-hyperfleet/hyperfleet-api` or `/org openshift-hyperfleet` then `/repo hyperfleet-api`
-  - **Notes:** owner and repo names are case-sensitive; only public repositories are accessible.
+  - **Notes:** owner and repo names are case-sensitive.

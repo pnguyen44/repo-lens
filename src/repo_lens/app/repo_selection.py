@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 from typing import Protocol, Self
 
@@ -5,8 +6,13 @@ from repo_lens.app.runtime import App
 from repo_lens.core.config import Config
 from repo_lens.core.repo_context import RepoContext
 
+logger = logging.getLogger(__name__)
+
 REPO_SWITCH_HINT = "Switch org: `/org <name>`. Switch repo: `/repo <repo-name>`, or `/repo owner/repo`."
-REPO_PUBLIC_NOTE = "Only public repositories are accessible."
+REPO_ACCESS_ERROR = (
+    "Could not access `{key}`. Check that the repository name is correct."
+    " Some repositories may have restricted access."
+)
 
 
 class OnMessageCallback(Protocol):
@@ -41,9 +47,13 @@ async def bootstrap_repo(
 
     repo_context = RepoContext(owner=owner, repo=repo)
     if not await app.validate_repo(repo_context):
+        logger.warning(
+            "Cannot access %s — check GITHUB_TOKEN permissions in .env",
+            repo_context.key,
+        )
         return (
             None,
-            f"Could not access `{repo_context.key}`. Check your .env and GitHub token.",
+            REPO_ACCESS_ERROR.format(key=repo_context.key),
         )
 
     return repo_context, None
@@ -70,7 +80,7 @@ def repo_ready_message(repo_key: str, switched: bool = False) -> str:
     label = "Now chatting about" if switched else "Chatting about"
     message = f"{label} `{repo_key}`."
     if not switched:
-        message = f"{message} {REPO_SWITCH_HINT} {REPO_PUBLIC_NOTE}"
+        message = f"{message} {REPO_SWITCH_HINT}"
     return message
 
 
@@ -136,7 +146,11 @@ async def resolve_repo_from_arg(
     if await app.validate_repo(repo_context):
         return repo_context, None
 
-    return None, f"Could not access `{owner}/{repo}`. Check the name and try again."
+    logger.warning(
+        "Cannot access %s — check GITHUB_TOKEN permissions in .env",
+        f"{owner}/{repo}",
+    )
+    return None, REPO_ACCESS_ERROR.format(key=f"{owner}/{repo}")
 
 
 async def switch_org(
