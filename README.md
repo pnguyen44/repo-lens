@@ -135,6 +135,8 @@ Then open [http://localhost:8001](http://localhost:8001). Stop with `make down`.
 
 Deployed on [Render](https://render.com) (free tier) with [Qdrant Cloud](https://cloud.qdrant.io) for persistent vector storage.
 
+Live demo: <https://repo-lens-r431.onrender.com/> (protected by login; free tier spins down when idle, so the first request may be slow)
+
 **To deploy your own instance:**
 
 1. Fork this repo
