@@ -161,6 +161,12 @@ class App:
             return 0
 
         if indexed_sha is not None:
+            logger.info(
+                "SHA mismatch for %s (indexed=%s, current=%s), re-indexing",
+                path,
+                indexed_sha,
+                fetched_file.sha,
+            )
             await self.document_indexer.evict_file(repo=repo_context.key, path=path)
 
         docs = file_path_to_chunks(
